@@ -1,195 +1,197 @@
 # api_smartsupply
 
-API REST em Node com Express, Zod, Prisma (PostgreSQL) e TypeScript. O `tsx` executa os arquivos `.ts` direto, sem build em desenvolvimento.
+REST API in Node with Express, Zod, Prisma (PostgreSQL) and TypeScript. `tsx` runs the `.ts` files directly, with no build step in development.
 
-## Pré-requisitos
+## Prerequisites
 
-| Item | Versão | Observação |
+| Item | Version | Notes |
 | --- | --- | --- |
-| Node.js | **22.12+** (recomendado: LTS atual) | O Prisma 7 não instala em versões anteriores, como a 22.11. Confira com `node -v` |
-| npm | Vem com o Node | |
-| Docker | Qualquer versão recente | Para subir o PostgreSQL. Pode usar um PostgreSQL 15+ já instalado |
-| Cliente HTTP | `curl`, Insomnia ou Postman | Para testar a API |
+| Node.js | **22.12+** (recommended: current LTS) | Prisma 7 does not install on earlier versions, such as 22.11. Check with `node -v` |
+| npm | Comes with Node | |
+| Docker | Any recent version | To run PostgreSQL. You can use an existing PostgreSQL 15+ instead |
+| HTTP client | `curl`, Insomnia or Postman | To test the API |
 
-## Primeira execução
+## First run
 
-Rode os comandos na raiz do projeto, nesta ordem.
+Run the commands from the project root, in this order.
 
-### 1. Instalar as dependências
+### 1. Install the dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Criar o arquivo `.env`
+### 2. Create the `.env` file
 
-Copie o exemplo e ajuste se precisar:
+Copy the example and adjust it if needed:
 
 ```bash
 cp .env.example .env
 ```
 
-No Windows (PowerShell): `Copy-Item .env.example .env`
+On Windows (PowerShell): `Copy-Item .env.example .env`
 
-Para o PostgreSQL do `docker-compose.yml`, o conteúdo deve ser:
+For the PostgreSQL in `docker-compose.yml`, the content must be:
 
 ```text
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/minha_api"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/smartsupply"
 PORT=3000
 ```
 
-O formato da URL é `postgresql://USUARIO:SENHA@HOST:PORTA/NOME_DO_BANCO`.
+The URL format is `postgresql://USER:PASSWORD@HOST:PORT/DATABASE_NAME`.
 
-### 3. Subir o banco de dados
+### 3. Start the database
 
 ```bash
 docker compose up -d
 docker compose ps
 ```
 
-O container `minha-api-db` deve aparecer com status `Up`. No Windows, abra o Docker Desktop antes.
+The `smartsupply-db` container should show status `Up`. On Windows, open Docker Desktop first.
 
-Se preferir um PostgreSQL já instalado, crie um banco chamado `minha_api` e ajuste o `DATABASE_URL` do `.env`.
+If you prefer an existing PostgreSQL, create a database named `smartsupply` and adjust `DATABASE_URL` in the `.env`.
 
-### 4. Aplicar as migrations e gerar o client do Prisma
+### 4. Apply the migrations and generate the Prisma client
 
 ```bash
 npm run db:migrate
 npm run db:generate
 ```
 
-O `db:migrate` cria as tabelas no banco. O `db:generate` cria a pasta `src/generated/prisma`, que não vai para o git. Sem ela, a API não sobe.
+`db:migrate` creates the tables in the database. `db:generate` creates the `src/generated/prisma` folder, which is not committed to git. Without it, the API does not start.
 
-### 5. Rodar a API
+### 5. Run the API
 
 ```bash
 npm run dev
 ```
 
-O terminal deve mostrar `API rodando em http://localhost:3000`. O modo `dev` reinicia sozinho a cada alteração no código.
+The terminal should show `API running at http://localhost:3000`. The `dev` mode restarts automatically on every code change.
 
-### 6. Conferir que está funcionando
+### 6. Check that it works
 
 ```bash
 curl http://localhost:3000/health
 ```
 
-Resposta esperada: `{"status":"ok"}`.
+Expected response: `{"status":"ok"}`.
 
 ## Scripts
 
-| Comando | O que faz |
+| Command | What it does |
 | --- | --- |
-| `npm run dev` | Sobe a API e reinicia a cada alteração no código |
-| `npm start` | Sobe a API sem recarga automática (produção) |
-| `npm run db:generate` | Gera o client do Prisma a partir do `schema.prisma` |
-| `npm run db:migrate` | Cria e aplica uma migration no banco de desenvolvimento |
-| `npm run db:deploy` | Aplica as migrations existentes (produção) |
-| `npm run db:studio` | Abre uma interface web para ver e editar os dados |
-| `npx tsc --noEmit` | Confere o TypeScript. Sem saída significa que está tudo certo |
+| `npm run dev` | Starts the API and restarts on every code change |
+| `npm start` | Starts the API without automatic reload (production) |
+| `npm run db:generate` | Generates the Prisma client from the schema files in `prisma/schema/` |
+| `npm run db:migrate` | Creates and applies a migration in the development database |
+| `npm run db:deploy` | Applies the existing migrations (production) |
+| `npm run db:studio` | Opens a web interface to view and edit the data |
+| `npx tsc --noEmit` | Checks the TypeScript. No output means everything is fine |
 
-## Rotas
+## Routes
 
-| Método | URL | Descrição | Status de sucesso |
+| Method | URL | Description | Success status |
 | --- | --- | --- | --- |
-| GET | `/health` | Confere se a API está de pé | 200 |
-| GET | `/usuarios` | Lista os usuários | 200 |
-| GET | `/usuarios/:id` | Busca um usuário | 200 |
-| POST | `/usuarios` | Cria um usuário (`nome`, `email`) | 201 |
-| PUT | `/usuarios/:id` | Atualiza um usuário (campos opcionais) | 200 |
-| DELETE | `/usuarios/:id` | Remove um usuário | 204 |
+| GET | `/health` | Checks that the API is up | 200 |
+| GET | `/users` | Lists the users | 200 |
+| GET | `/users/:id` | Gets a user | 200 |
+| POST | `/users` | Creates a user (`name`, `email`) | 201 |
+| PUT | `/users/:id` | Updates a user (optional fields) | 200 |
+| DELETE | `/users/:id` | Removes a user | 204 |
 
-Exemplo:
+Example:
 
 ```bash
-curl -i -X POST http://localhost:3000/usuarios \
+curl -i -X POST http://localhost:3000/users \
   -H "Content-Type: application/json" \
-  -d '{"nome":"Maria","email":"maria@exemplo.com"}'
+  -d '{"name":"Maria","email":"maria@example.com"}'
 ```
 
-No PowerShell do Windows, use `curl.exe` no lugar de `curl`, ou teste pelo Insomnia ou Postman, por causa das regras de aspas.
+In Windows PowerShell, use `curl.exe` instead of `curl`, or test with Insomnia or Postman, because of quoting rules.
 
-Erros devolvem sempre `{"erro": "mensagem"}`: `400` para dados inválidos ou `:id` inválido, `404` para registro não encontrado e `409` para e-mail repetido.
+Errors always return `{"error": "message"}`: `400` for invalid data or an invalid `:id`, `404` for a record not found and `409` for a duplicate email.
 
-## Estrutura de pastas
+## Folder structure
 
 ```text
 ├── prisma/
-│   ├── schema.prisma             ← modelos do banco
-│   └── migrations/               ← gerada pelo Prisma (versionar no git)
+│   ├── schema/                   ← Prisma schema, one file per model
+│   │   ├── base.prisma           ← generator and datasource
+│   │   └── user.prisma           ← model User
+│   └── migrations/               ← generated by Prisma (commit to git)
 ├── src/
-│   ├── generated/prisma/         ← gerada pelo Prisma (não editar, não versionar)
-│   ├── lib/                      ← prisma.ts, erros.ts, ler-id.ts
-│   ├── middlewares/              ← validar.ts, tratar-erros.ts
-│   ├── schemas/                  ← validação do body com Zod
-│   ├── services/                 ← regras de negócio e acesso ao banco
-│   ├── controllers/              ← lê req, chama o service, devolve res
-│   ├── routes/                   ← liga a URL ao controller
-│   ├── app.ts                    ← configura o Express
-│   └── server.ts                 ← sobe o servidor (listen)
+│   ├── generated/prisma/         ← generated by Prisma (do not edit, do not commit)
+│   ├── lib/                      ← prisma.ts, errors.ts, read-id.ts
+│   ├── middlewares/              ← validate.ts, error-handler.ts
+│   ├── schemas/                  ← body validation with Zod
+│   ├── services/                 ← business rules and database access
+│   ├── controllers/              ← reads req, calls the service, returns res
+│   ├── routes/                   ← maps the URL to the controller
+│   ├── app.ts                    ← configures Express
+│   └── server.ts                 ← starts the server (listen)
 ├── .env
-├── docker-compose.yml            ← PostgreSQL local
-├── prisma.config.ts              ← configuração do Prisma CLI
+├── docker-compose.yml            ← local PostgreSQL
+├── prisma.config.ts              ← Prisma CLI configuration
 └── tsconfig.json
 ```
 
-O fluxo de uma requisição é sempre: rota → controller → service → banco. Erros lançados no caminho são capturados pelo `tratar-erros.ts`.
+A request always flows: route → controller → service → database. Errors thrown along the way are caught by `error-handler.ts`.
 
-| Camada | Responsabilidade | Não deve fazer |
+| Layer | Responsibility | Must not |
 | --- | --- | --- |
-| `routes/` | Liga a URL ao controller e aplica a validação | Ter lógica |
-| `controllers/` | Lê `req`, chama o service, devolve `res` | Acessar o banco |
-| `services/` | Regras de negócio e acesso ao banco via Prisma | Conhecer `req` e `res` |
-| `schemas/` | Descreve e valida os dados de entrada com Zod | Ter regra de negócio |
+| `routes/` | Maps the URL to the controller and applies validation | Contain logic |
+| `controllers/` | Reads `req`, calls the service, returns `res` | Access the database |
+| `services/` | Business rules and database access via Prisma | Know about `req` and `res` |
+| `schemas/` | Describes and validates the input data with Zod | Contain business rules |
 
-## Criar uma nova funcionalidade
+## Creating a new feature
 
-Um recurso novo segue os mesmos passos. O exemplo cria `produto`:
+A new resource follows the same steps. The example creates `product`:
 
-1. Acrescente o `model Produto` ao `prisma/schema.prisma`.
-2. Rode `npm run db:migrate -- --name criar-produto` e depois `npm run db:generate`.
-3. Crie `src/schemas/produto.schema.ts`.
-4. Copie `usuario.service.ts`, `usuario.controller.ts` e `usuario.routes.ts`, trocando os nomes. No service, apague a checagem de e-mail repetido.
-5. Registre a rota em `src/routes/index.ts`: `router.use('/produtos', produtoRoutes);`
-6. Teste com `curl`.
+1. Create `prisma/schema/product.prisma` with `model Product`.
+2. Run `npm run db:migrate -- --name create-product` and then `npm run db:generate`.
+3. Create `src/schemas/product.schema.ts`.
+4. Copy `user.service.ts`, `user.controller.ts` and `user.routes.ts`, changing the names. In the service, delete the duplicate email check.
+5. Register the route in `src/routes/index.ts`: `router.use('/products', productRoutes);`
+6. Test with `curl`.
 
-## Prisma no dia a dia
+## Prisma day to day
 
-| Situação | Comandos |
+| Situation | Commands |
 | --- | --- |
-| Mudei o `schema.prisma` (coluna ou model novo) | `npm run db:migrate -- --name descricao-curta` e depois `npm run db:generate` |
-| Clonei o projeto ou outro dev mudou o schema | `npm install`, `npm run db:migrate` e `npm run db:generate` |
-| Publicar em produção | `npm run db:deploy` (só aplica as migrations existentes) |
-| Ver ou editar dados | `npm run db:studio` |
+| I changed a file in `prisma/schema/` (new column or model) | `npm run db:migrate -- --name short-description` and then `npm run db:generate` |
+| I cloned the project or another dev changed the schema | `npm install`, `npm run db:migrate` and `npm run db:generate` |
+| Deploy to production | `npm run db:deploy` (only applies the existing migrations) |
+| View or edit data | `npm run db:studio` |
 
-Regras para evitar problemas com migrations:
+Rules to avoid problems with migrations:
 
-- O nome da migration vai depois de `--`: `npm run db:migrate -- --name criar-produto`.
-- Commite sempre a pasta `prisma/migrations`.
-- Nunca edite nem apague uma migration já aplicada: crie outra.
-- Para apagar uma tabela, remova o `model` do schema e rode o `db:migrate`, que gera o `DROP TABLE`.
-- `npx prisma migrate reset` apaga todos os dados do banco. Use só em desenvolvimento.
+- The migration name goes after `--`: `npm run db:migrate -- --name create-product`.
+- Always commit the `prisma/migrations` folder.
+- Never edit or delete a migration that was already applied: create another one.
+- To drop a table, remove the `model` from the schema and run `db:migrate`, which generates the `DROP TABLE`.
+- `npx prisma migrate reset` erases all data in the database. Use it in development only.
 
-## Problemas comuns
+## Common problems
 
-| Sintoma | Causa provável | Solução |
+| Symptom | Likely cause | Solution |
 | --- | --- | --- |
-| `npm install` falha com "Prisma only supports Node.js versions 20.19+, 22.12+, 24.0+" | Node antigo | Instalar o Node 22.12+ (ou o LTS atual) |
-| Módulo não encontrado ao importar `generated/prisma/client` | O client ainda não foi gerado | `npm run db:generate` |
-| `prisma.produto` indefinido ou campo novo não aparece | Client desatualizado em relação ao schema | `npm run db:generate` e reiniciar a API |
-| `DATABASE_URL` não foi encontrada | Falta o `.env` na raiz | Criar o `.env` como no passo 2 |
-| `ECONNREFUSED` | O PostgreSQL não está rodando | Abrir o Docker, `docker compose up -d` e conferir com `docker compose ps` |
-| Falha de autenticação no banco | Usuário ou senha do `DATABASE_URL` diferem do `docker-compose.yml` | Alinhar os dois. Se o volume já existia, as credenciais antigas continuam valendo |
-| Porta 5432 já em uso | Há outro PostgreSQL na máquina | Trocar o mapeamento para `"5433:5432"` no compose e a porta na URL |
-| Erros entre CLI e client, ou aparece Prisma 8 | `prisma` e `@prisma/client` em versões diferentes | `npm i @prisma/client@7 && npm i -D prisma@7` |
-| `migrate dev` diz que as migrations aplicadas não estão na pasta local | A pasta `prisma/migrations` foi apagada, mas o banco guarda o histórico | Em desenvolvimento: `npx prisma migrate reset --force` e depois `npm run db:migrate` |
-| Resposta 500 sem explicação | Erro inesperado no código ou no banco | Ver o log no terminal da API |
-| Aviso do npm sobre `allowScripts` ao instalar | O npm novo pede aprovação dos scripts de instalação | `npm install-scripts approve prisma esbuild` |
+| `npm install` fails with "Prisma only supports Node.js versions 20.19+, 22.12+, 24.0+" | Old Node | Install Node 22.12+ (or the current LTS) |
+| Module not found when importing `generated/prisma/client` | The client has not been generated yet | `npm run db:generate` |
+| `prisma.product` undefined or a new field does not show up | Client out of date with the schema | `npm run db:generate` and restart the API |
+| `DATABASE_URL` was not found | Missing `.env` in the root | Create the `.env` as in step 2 |
+| `ECONNREFUSED` | PostgreSQL is not running | Open Docker, run `docker compose up -d` and check with `docker compose ps` |
+| Database authentication failure | User or password in `DATABASE_URL` differ from `docker-compose.yml` | Align both. If the volume already existed, the old credentials still apply |
+| Port 5432 already in use | Another PostgreSQL is on the machine | Change the mapping to `"5433:5432"` in the compose file and the port in the URL |
+| Errors between CLI and client, or Prisma 8 shows up | `prisma` and `@prisma/client` on different versions | `npm i @prisma/client@7 && npm i -D prisma@7` |
+| `migrate dev` says the applied migrations are not in the local folder | The `prisma/migrations` folder was deleted, but the database keeps the history | In development: `npx prisma migrate reset --force` and then `npm run db:migrate` |
+| 500 response with no explanation | Unexpected error in the code or database | Check the log in the API terminal |
+| npm warning about `allowScripts` on install | New npm asks for approval of install scripts | `npm install-scripts approve prisma esbuild` |
 
-## Parar o ambiente
+## Stopping the environment
 
 ```bash
-docker compose stop        # para o banco e mantém os dados
-docker compose down        # remove o container e mantém os dados
-docker compose down -v     # remove também o volume: apaga todos os dados
+docker compose stop        # stops the database and keeps the data
+docker compose down        # removes the container and keeps the data
+docker compose down -v     # also removes the volume: erases all data
 ```

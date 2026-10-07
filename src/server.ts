@@ -1,8 +1,8 @@
-import 'dotenv/config'; // precisa ser o primeiro import: carrega o .env
+import 'dotenv/config'; // must be the first import: loads the .env
 import app from './app';
 
-const porta = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-app.listen(porta, () => {
-  console.log(`API rodando em http://localhost:${porta}`);
+app.listen(port, () => {
+  console.log(`API running at http://localhost:${port}`);
 });

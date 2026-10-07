@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import usuarioRoutes from './usuario.routes';
+import userRoutes from './user.routes';
 
 const router = Router();
 
 router.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-router.use('/usuarios', usuarioRoutes);
-// router.use('/produtos', produtoRoutes);
+router.use('/users', userRoutes);
+// router.use('/products', productRoutes);
 
 export default router;
