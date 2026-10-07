@@ -1,0 +1,18 @@
+// ===========================================================================
+// Table rooms.organizations
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model RoomsOrganizations {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  rooms_access_requests      RoomsAccessRequests[]
+  rooms_organization_members RoomsOrganizationMembers[]
+  rooms_rooms                RoomsRooms[]
+
+  @@map("organizations")
+  @@schema("rooms")
+}

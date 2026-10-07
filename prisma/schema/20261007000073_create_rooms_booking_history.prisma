@@ -1,0 +1,19 @@
+// ===========================================================================
+// Table rooms.booking_history
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model RoomsBookingHistory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id  String   @db.Uuid
+  changed_by  String?  @db.Uuid
+  description String
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  booking        RoomsBookings  @relation(fields: [booking_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  changed_by_ref RoomsProfiles? @relation(fields: [changed_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([booking_id, created_at(sort: Desc)], map: "idx_booking_history_booking_id_created_at")
+  @@map("booking_history")
+  @@schema("rooms")
+}

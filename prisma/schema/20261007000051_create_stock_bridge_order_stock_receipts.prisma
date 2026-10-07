@@ -1,0 +1,28 @@
+// ===========================================================================
+// Table stock.bridge_order_stock_receipts
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockBridgeOrderStockReceipts {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bridge_order_id        String    @unique @db.Uuid
+  bridge_contract_id     String    @db.Uuid
+  stock_grupo_id         String    @db.Uuid
+  status_recebimento     String    @default("processado")
+  total_itens            Int       @default(0)
+  total_entradas         Int       @default(0)
+  total_produtos_criados Int       @default(0)
+  detalhes               Json      @default("{}")
+  processado_em          DateTime? @default(now()) @db.Timestamptz(6)
+  processado_por_user_id String?   @db.Uuid
+  created_at             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime  @default(now()) @db.Timestamptz(6)
+
+  processado_por_user Users?      @relation(fields: [processado_por_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stock_grupo         StockGrupos @relation(fields: [stock_grupo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([bridge_contract_id])
+  @@index([stock_grupo_id])
+  @@map("bridge_order_stock_receipts")
+  @@schema("stock")
+}

@@ -1,0 +1,34 @@
+// ===========================================================================
+// Table public.registered_suppliers
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model RegisteredSuppliers {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String
+  razao_social       String?
+  cnpj               String?
+  email              String?
+  telefone           String?
+  contato_nome       String?
+  observacoes        String?
+  is_active          Boolean  @default(true)
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @db.Timestamptz(6)
+  zip_code           String?  @db.Char(8)
+  state              String?  @db.Char(2)
+  city               String?  @db.Char(155)
+  neighborhood       String?  @db.Char(55)
+  address_number     String?  @db.Char(55)
+  address_complement String?  @db.Char(155)
+  external_key       String?  @db.Char(8)
+
+  supplier_service_regionals SupplierServiceRegionals[]
+  service_tickets            ServiceTickets[]
+  service_ticket_products    ServiceTicketProducts[]
+
+  @@index([is_active], map: "idx_registered_suppliers_active")
+  @@index([cnpj], map: "idx_registered_suppliers_cnpj")
+  @@map("registered_suppliers")
+  @@schema("public")
+}

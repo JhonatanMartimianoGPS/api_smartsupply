@@ -1,0 +1,19 @@
+// ===========================================================================
+// Table stock.user_grupos
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockUserGrupos {
+  user_id    String    @db.Uuid
+  grupo_id   String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  grupo StockGrupos @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user  Users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, grupo_id])
+  @@index([grupo_id])
+  @@index([user_id])
+  @@map("user_grupos")
+  @@schema("stock")
+}

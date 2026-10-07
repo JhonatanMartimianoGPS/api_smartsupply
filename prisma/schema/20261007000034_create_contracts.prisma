@@ -1,0 +1,41 @@
+// ===========================================================================
+// Table public.contracts
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model Contracts {
+  id                                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                               String
+  category_id                        String?  @db.Uuid
+  total_budget                       Decimal  @default(0) @db.Decimal(12, 2)
+  used_budget                        Decimal  @default(0) @db.Decimal(12, 2)
+  created_at                         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                         DateTime @default(now()) @db.Timestamptz(6)
+  budget_locked                      Boolean  @default(false)
+  regional_id                        String   @db.Uuid
+  allow_extra_order                  Boolean  @default(false)
+  allow_unlimited_items_solicitation Boolean  @default(false)
+  max_items_per_solicitation         Int      @default(10)
+  allow_custom_prices                Boolean  @default(false)
+  unlimited_budget                   Boolean  @default(false)
+
+  category                                 ContractCategories?                    @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  regional                                 Regionals                              @relation(fields: [regional_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  assistant_contracts                      AssistantContracts[]
+  contract_budget_periods                  ContractBudgetPeriods[]
+  contract_product_category_budgets        ContractProductCategoryBudgets[]
+  contract_product_category_budget_periods ContractProductCategoryBudgetPeriods[]
+  order_issue_reports                      OrderIssueReports[]
+  orders                                   Orders[]
+  order_delivery_divergences               OrderDeliveryDivergences[]
+  service_tickets                          ServiceTickets[]
+  solicitations                            Solicitations[]
+  product_contract_availability            ProductContractAvailability[]
+
+  @@index([category_id], map: "idx_contracts_category_id")
+  @@index([id, regional_id], map: "idx_contracts_id_regional")
+  @@index([name], map: "idx_contracts_name")
+  @@index([regional_id], map: "idx_contracts_regional_id")
+  @@map("contracts")
+  @@schema("public")
+}

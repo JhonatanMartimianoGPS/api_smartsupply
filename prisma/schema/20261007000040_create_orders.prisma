@@ -1,0 +1,30 @@
+// ===========================================================================
+// Table public.orders
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model Orders {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String   @db.Uuid
+  contract_id      String   @db.Uuid
+  status           String   @default("pendente")
+  total            Decimal  @default(0) @db.Decimal(12, 2)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  competence_month DateTime @default(dbgenerated("(date_trunc('month'::text, timezone('America/Sao_Paulo'::text, now())))::date")) @db.Date
+  is_extra_order   Boolean  @default(false)
+  notes            String?
+
+  contract                   Contracts                  @relation(fields: [contract_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user                       Users                      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  order_delivery_divergences OrderDeliveryDivergences[]
+  order_history              OrderHistory[]
+  order_items                OrderItems[]
+
+  @@index([competence_month], map: "idx_orders_competence_month")
+  @@index([contract_id, status], map: "idx_orders_contract_id_status")
+  @@index([created_at(sort: Desc)], map: "idx_orders_created_at_desc")
+  @@index([status, created_at(sort: Desc)], map: "idx_orders_status_created_at")
+  @@map("orders")
+  @@schema("public")
+}

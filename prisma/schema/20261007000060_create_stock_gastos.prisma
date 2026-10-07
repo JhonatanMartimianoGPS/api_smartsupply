@@ -1,0 +1,30 @@
+// ===========================================================================
+// Table stock.gastos
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockGastos {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  descricao     String
+  valor         Decimal   @db.Decimal(10, 2)
+  data          DateTime  @default(now()) @db.Timestamptz(6)
+  tipo          String
+  entrada_id    String?   @db.Uuid
+  produto_id    String?   @db.Uuid
+  fornecedor_id String?   @db.Uuid
+  observacoes   String?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  entrada    StockEntradas?     @relation(fields: [entrada_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  fornecedor StockFornecedores? @relation(fields: [fornecedor_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  produto    StockProdutos?     @relation(fields: [produto_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([data(sort: Desc)], map: "idx_gastos_data")
+  @@index([entrada_id], map: "idx_gastos_entrada_id")
+  @@index([fornecedor_id], map: "idx_gastos_fornecedor_id")
+  @@index([produto_id], map: "idx_gastos_produto_id")
+  @@index([tipo], map: "idx_gastos_tipo")
+  @@map("gastos")
+  @@schema("stock")
+}

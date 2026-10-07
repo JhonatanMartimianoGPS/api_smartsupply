@@ -1,0 +1,29 @@
+// ===========================================================================
+// Table rooms.bookings
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model RoomsBookings {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id          String             @db.Uuid
+  user_id          String             @db.Uuid
+  date             DateTime           @db.Date
+  start_time       DateTime           @db.Time(6)
+  end_time         DateTime           @db.Time(6)
+  status           RoomsBookingStatus @default(pending)
+  observation      String?
+  responsible_name String?
+  approved_by      String?            @db.Uuid
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+
+  approved_by_ref       RoomsProfiles?        @relation("bookings_approved_by_fkey", fields: [approved_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  room                  RoomsRooms            @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user                  RoomsProfiles         @relation("bookings_user_id_profiles_fk", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "bookings_user_id_profiles_fk")
+  rooms_booking_history RoomsBookingHistory[]
+
+  @@index([room_id, date, start_time], map: "idx_bookings_room_date")
+  @@index([user_id, date], map: "idx_bookings_user_date")
+  @@map("bookings")
+  @@schema("rooms")
+}

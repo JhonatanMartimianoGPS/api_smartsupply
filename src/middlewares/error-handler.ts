@@ -10,6 +10,11 @@ export function errorHandler(error, req, res, next) {
     return res.status(409).json({ error: 'Record already exists' });
   }
 
+  // Foreign key points to a record that does not exist (e.g. unknown user_id)
+  if (error.code === 'P2003') {
+    return res.status(400).json({ error: 'Referenced record does not exist' });
+  }
+
   console.error(error);
   res.status(500).json({ error: 'Internal server error' });
 }

@@ -1,9 +1,12 @@
 generator client {
-  provider     = "prisma-client"
-  output       = "../../src/generated/prisma"
-  moduleFormat = "esm"
+  provider        = "prisma-client"
+  output          = "../../src/generated/prisma"
+  moduleFormat    = "esm"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  schemas    = ["public", "stock", "rooms"]
+  extensions = [pg_trgm]
 }

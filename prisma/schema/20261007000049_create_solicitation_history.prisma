@@ -1,0 +1,22 @@
+// ===========================================================================
+// Table public.solicitation_history
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model SolicitationHistory {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  solicitation_id String            @db.Uuid
+  user_id         String            @db.Uuid
+  action          String
+  from_step       SolicitationStep?
+  to_step         SolicitationStep?
+  details         String?
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+
+  solicitation Solicitations @relation(fields: [solicitation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_solicitation_history_created_at")
+  @@index([solicitation_id], map: "idx_solicitation_history_solicitation_id")
+  @@map("solicitation_history")
+  @@schema("public")
+}

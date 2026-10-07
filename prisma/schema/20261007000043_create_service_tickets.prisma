@@ -1,0 +1,41 @@
+// ===========================================================================
+// Table public.service_tickets
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ServiceTickets {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contract_id            String   @db.Uuid
+  user_id                String   @db.Uuid
+  ticket_type_id         String?  @db.Uuid
+  flow_id                String?  @db.Uuid
+  title                  String
+  description            String
+  status                 String   @default("aberto")
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @db.Timestamptz(6)
+  priority               String   @default("media")
+  final_cost             Decimal  @default(0.00) @db.Decimal(12, 2)
+  auto_sync_cost         Boolean  @default(true)
+  supplier_id            String?  @db.Uuid
+  supplier_name_snapshot String?
+
+  contract                   Contracts                  @relation(fields: [contract_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  flow                       ServiceTicketFlows?        @relation(fields: [flow_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  supplier                   RegisteredSuppliers?       @relation(fields: [supplier_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  ticket_type                ServiceTicketTypes?        @relation(fields: [ticket_type_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  user                       Users                      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  service_ticket_attachments ServiceTicketAttachments[]
+  service_ticket_messages    ServiceTicketMessages[]
+  service_ticket_steps       ServiceTicketSteps[]
+  service_ticket_products    ServiceTicketProducts[]
+
+  @@index([contract_id, created_at(sort: Desc)], map: "idx_service_tickets_contract_created")
+  @@index([flow_id], map: "idx_service_tickets_flow_id")
+  @@index([status, created_at(sort: Desc)], map: "idx_service_tickets_status_created")
+  @@index([supplier_id], map: "idx_service_tickets_supplier_id")
+  @@index([ticket_type_id], map: "idx_service_tickets_ticket_type_id")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_service_tickets_user_created")
+  @@map("service_tickets")
+  @@schema("public")
+}

@@ -1,0 +1,23 @@
+// ===========================================================================
+// Table stock.locais_armazenamento
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockLocaisArmazenamento {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome        String    @db.VarChar(200)
+  observacoes String?   @db.VarChar(1000)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  padrao      Boolean   @default(false)
+  grupo_id    String    @db.Uuid
+
+  grupo                              StockGrupos                      @relation(fields: [grupo_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  stock_bridge_contract_stock_groups StockBridgeContractStockGroups[]
+  stock_entradas                     StockEntradas[]
+  stock_saidas                       StockSaidas[]
+
+  @@index([grupo_id])
+  @@map("locais_armazenamento")
+  @@schema("stock")
+}

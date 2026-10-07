@@ -1,0 +1,54 @@
+// ===========================================================================
+// Table public.users
+// Replaces the Supabase auth.users table: every user_id / created_by / ...
+// column in the other tables points to it.
+// ===========================================================================
+
+model Users {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique
+  password_hash String
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  app_notifications                         AppNotifications[]
+  commercial_prospects                      CommercialProspects[]
+  commercial_contacts                       CommercialContacts[]
+  commercial_interactions                   CommercialInteractions[]
+  commercial_simulations                    CommercialSimulations[]
+  feed_posts                                FeedPosts[]
+  feed_post_comments                        FeedPostComments[]
+  feed_comment_likes                        FeedCommentLikes[]
+  product_history                           ProductHistory[]
+  system_ai_settings                        SystemAiSettings[]
+  system_modules_config                     SystemModulesConfig[]
+  team_members_by_created_by                TeamMembers[]                   @relation("team_members_created_by_fkey")
+  team_members_by_user_id                   TeamMembers[]                   @relation("team_members_user_id_fkey")
+  user_regionals                            UserRegionals[]
+  user_roles                                UserRoles[]
+  feed_post_likes                           FeedPostLikes[]
+  stock_profiles                            StockProfiles?
+  stock_user_roles                          StockUserRoles[]
+  rooms_profiles                            RoomsProfiles?
+  rooms_user_roles                          RoomsUserRoles[]
+  assistant_contracts                       AssistantContracts[]
+  order_issue_reports_by_resolved_by        OrderIssueReports[]             @relation("order_issue_reports_resolved_by_fkey")
+  order_issue_reports_by_user_id            OrderIssueReports[]             @relation("order_issue_reports_user_id_fkey")
+  orders                                    Orders[]
+  order_delivery_divergences_by_reported_by OrderDeliveryDivergences[]      @relation("order_delivery_divergences_reported_by_fkey")
+  order_delivery_divergences_by_resolved_by OrderDeliveryDivergences[]      @relation("order_delivery_divergences_resolved_by_fkey")
+  service_tickets                           ServiceTickets[]
+  service_ticket_attachments                ServiceTicketAttachments[]
+  service_ticket_messages                   ServiceTicketMessages[]
+  service_ticket_steps                      ServiceTicketSteps[]
+  solicitations                             Solicitations[]
+  profiles_by_blocked_by                    Profiles[]                      @relation("profiles_blocked_by_fkey")
+  profiles_by_user_id                       Profiles?                       @relation("profiles_user_id_fkey")
+  stock_bridge_order_stock_receipts         StockBridgeOrderStockReceipts[]
+  stock_user_grupos                         StockUserGrupos[]
+  rooms_access_requests                     RoomsAccessRequests[]
+  service_ticket_products                   ServiceTicketProducts[]
+
+  @@map("users")
+  @@schema("public")
+}

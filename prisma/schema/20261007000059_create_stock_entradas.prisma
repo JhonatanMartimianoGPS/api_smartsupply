@@ -1,0 +1,41 @@
+// ===========================================================================
+// Table stock.entradas
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockEntradas {
+  id                          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  data                        DateTime  @default(now()) @db.Timestamptz(6)
+  produto_id                  String    @db.Uuid
+  nota_fiscal                 String?   @db.VarChar(100)
+  responsavel_id              String?   @db.Uuid
+  custo_unitario              Decimal   @db.Decimal(10, 2)
+  quantidade                  Int
+  fornecedor_id               String?   @db.Uuid
+  dias_entrega                Int?
+  local_armazenamento_id      String?   @db.Uuid
+  centro_distribuicao_id      String?   @db.Uuid
+  total                       Decimal?  @db.Decimal(10, 2)
+  created_at                  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime? @default(now()) @db.Timestamptz(6)
+  registrado_por_user_id      String?   @db.Uuid
+  origem_sistema              String?
+  origem_bridge_order_id      String?   @db.Uuid
+  origem_bridge_order_item_id String?   @db.Uuid
+
+  centro_distribuicao StockCentrosDistribuicao? @relation(fields: [centro_distribuicao_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fornecedor          StockFornecedores?        @relation(fields: [fornecedor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  local_armazenamento StockLocaisArmazenamento? @relation(fields: [local_armazenamento_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  produto             StockProdutos             @relation(fields: [produto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  registrado_por_user StockProfiles?            @relation(fields: [registrado_por_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  responsavel         StockProfissionais?       @relation(fields: [responsavel_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stock_gastos        StockGastos[]
+
+  @@index([origem_bridge_order_id])
+  @@index([origem_bridge_order_item_id])
+  @@index([registrado_por_user_id])
+  @@index([data(sort: Desc)], map: "idx_stock_entradas_data_desc")
+  @@index([produto_id], map: "idx_stock_entradas_produto_id")
+  @@map("entradas")
+  @@schema("stock")
+}

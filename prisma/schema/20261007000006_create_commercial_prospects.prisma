@@ -1,0 +1,39 @@
+// ===========================================================================
+// Table public.commercial_prospects
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model CommercialProspects {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_name             String
+  location                 String
+  state                    String   @default("DF")
+  project_name             String   @default("")
+  segment                  String   @default("Geral")
+  investment_or_size       String   @default("")
+  demanded_services        String[] @default([])
+  tier                     String   @default("Tier 2 (Médio Porte)")
+  fit_score                Int      @default(80)
+  estimated_monthly_ticket Decimal  @default(0) @db.Decimal
+  pipeline_stage           String   @default("novo_prospect")
+  sales_pitch              String   @default("")
+  suspect_lead             Json?
+  verified_contacts        Json     @default("[]")
+  outsourcing_signal       Json?
+  company_details          Json?
+  ai_deep_investigation    Json?
+  notes                    String?
+  created_by               String?  @db.Uuid
+  created_at               DateTime @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime @default(now()) @db.Timestamptz(6)
+
+  created_by_ref          Users?                   @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  commercial_contacts     CommercialContacts[]
+  commercial_interactions CommercialInteractions[]
+
+  @@index([created_at(sort: Desc)], map: "idx_commercial_prospects_created")
+  @@index([pipeline_stage], map: "idx_commercial_prospects_stage")
+  @@index([state], map: "idx_commercial_prospects_state")
+  @@map("commercial_prospects")
+  @@schema("public")
+}

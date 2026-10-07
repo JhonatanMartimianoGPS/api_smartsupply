@@ -1,0 +1,31 @@
+// ===========================================================================
+// Table public.team_members
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model TeamMembers {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  regional_id   String   @db.Uuid
+  full_name     String
+  role_label    String
+  bio           String?
+  email         String?
+  phone         String?
+  avatar_url    String?
+  display_order Int      @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  created_by    String?  @db.Uuid
+  user_id       String?  @db.Uuid
+  active        Boolean  @default(true)
+
+  created_by_ref Users?    @relation("team_members_created_by_fkey", fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  regional       Regionals @relation(fields: [regional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user           Users?    @relation("team_members_user_id_fkey", fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([regional_id, display_order, created_at], map: "team_members_display_order_idx")
+  @@index([regional_id])
+  @@index([user_id])
+  @@map("team_members")
+  @@schema("public")
+}

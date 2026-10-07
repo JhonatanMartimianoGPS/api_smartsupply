@@ -1,0 +1,34 @@
+// ===========================================================================
+// Table public.service_ticket_products
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ServiceTicketProducts {
+  id                          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_id                   String   @db.Uuid
+  product_id                  String?  @db.Uuid
+  product_name_snapshot       String
+  product_code_snapshot       String
+  product_unit_snapshot       String?
+  quantity                    Decimal  @default(1) @db.Decimal(12, 2)
+  unit_price                  Decimal  @default(0.00) @db.Decimal(12, 2)
+  total_price                 Decimal  @default(0.00) @db.Decimal(12, 2)
+  notes                       String?
+  created_by                  String?  @db.Uuid
+  created_at                  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime @default(now()) @db.Timestamptz(6)
+  product_fornecedor_snapshot String?
+  supplier_id                 String?  @db.Uuid
+
+  created_by_ref Users?               @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  product        Products?            @relation(fields: [product_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  supplier       RegisteredSuppliers? @relation(fields: [supplier_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  ticket         ServiceTickets       @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([product_fornecedor_snapshot], map: "idx_service_ticket_products_fornecedor_snapshot")
+  @@index([product_id], map: "idx_service_ticket_products_product_id")
+  @@index([supplier_id], map: "idx_service_ticket_products_supplier_id")
+  @@index([ticket_id], map: "idx_service_ticket_products_ticket_id")
+  @@map("service_ticket_products")
+  @@schema("public")
+}

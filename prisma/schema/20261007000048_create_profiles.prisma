@@ -1,0 +1,38 @@
+// ===========================================================================
+// Table public.profiles
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model Profiles {
+  id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                      String    @unique @db.Uuid
+  full_name                    String
+  created_at                   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime  @default(now()) @db.Timestamptz(6)
+  email                        String?
+  allow_special_solicitation   Boolean   @default(false)
+  is_blocked                   Boolean   @default(false)
+  blocked_at                   DateTime? @db.Timestamptz(6)
+  blocked_reason               String?
+  blocked_by                   String?   @db.Uuid
+  last_seen_at                 DateTime? @db.Timestamptz(6)
+  last_ip                      String?
+  last_city                    String?
+  last_region                  String?
+  last_country                 String?
+  last_user_agent              String?
+  cpf_cnpj                     String?   @db.Char(14)
+  external_key                 String?   @db.Char(8)
+  external_integration_enabled Boolean   @default(false)
+
+  blocked_by_ref Users? @relation("profiles_blocked_by_fkey", fields: [blocked_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           Users  @relation("profiles_user_id_fkey", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([full_name], map: "idx_profiles_full_name")
+  @@index([is_blocked], map: "idx_profiles_is_blocked")
+  @@index([last_seen_at], map: "idx_profiles_last_seen_at")
+  @@index([user_id], map: "idx_profiles_user_id")
+  @@index([user_id, last_seen_at], map: "idx_profiles_user_last_seen")
+  @@map("profiles")
+  @@schema("public")
+}

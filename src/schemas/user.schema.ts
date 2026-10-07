@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const createUserSchema = z.object({
-  name: z.string('Name is required').min(2, 'Name is too short'),
   email: z.email('Invalid email'),
+  password: z.string('Password is required').min(8, 'Password must have at least 8 characters'),
 });
 
 // Same fields, but all optional (for updates)

@@ -1,0 +1,24 @@
+// ===========================================================================
+// Table stock.centros_distribuicao
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockCentrosDistribuicao {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome        String    @db.VarChar(200)
+  endereco    String?   @db.VarChar(500)
+  responsavel String?   @db.VarChar(200)
+  telefone    String?   @db.VarChar(50)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  grupo_id    String    @db.Uuid
+
+  grupo                              StockGrupos                      @relation(fields: [grupo_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  stock_bridge_contract_stock_groups StockBridgeContractStockGroups[]
+  stock_entradas                     StockEntradas[]
+  stock_saidas                       StockSaidas[]
+
+  @@index([grupo_id])
+  @@map("centros_distribuicao")
+  @@schema("stock")
+}

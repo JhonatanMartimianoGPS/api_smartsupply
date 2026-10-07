@@ -1,0 +1,16 @@
+// ===========================================================================
+// Table rooms.user_roles
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model RoomsUserRoles {
+  id      String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id String       @db.Uuid
+  role    RoomsAppRole @default(user)
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, role])
+  @@map("user_roles")
+  @@schema("rooms")
+}

@@ -1,0 +1,25 @@
+// ===========================================================================
+// Table public.contract_product_category_budget_periods
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ContractProductCategoryBudgetPeriods {
+  id                                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contract_product_category_budget_id String   @db.Uuid
+  contract_id                         String   @db.Uuid
+  product_category_id                 String   @db.Uuid
+  period_month                        DateTime @db.Date
+  monthly_budget                      Decimal  @default(0) @db.Decimal(12, 2)
+  used_budget                         Decimal  @default(0) @db.Decimal(12, 2)
+  created_at                          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                          DateTime @default(now()) @db.Timestamptz(6)
+
+  contract_product_category_budget ContractProductCategoryBudgets @relation(fields: [contract_product_category_budget_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "contract_product_category_bud_contract_product_category_bu_fkey")
+  contract                         Contracts                      @relation(fields: [contract_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([contract_product_category_budget_id, period_month], map: "contract_product_category_bud_contract_product_category_bud_key")
+  @@index([contract_id, period_month(sort: Desc)], map: "idx_contract_product_category_budget_periods_contract_period")
+  @@index([product_category_id, period_month(sort: Desc)], map: "idx_contract_product_category_budget_periods_product_category_p")
+  @@map("contract_product_category_budget_periods")
+  @@schema("public")
+}

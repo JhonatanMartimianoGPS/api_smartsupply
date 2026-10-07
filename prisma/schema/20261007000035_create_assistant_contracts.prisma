@@ -1,0 +1,20 @@
+// ===========================================================================
+// Table public.assistant_contracts
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model AssistantContracts {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  contract_id String   @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  contract Contracts @relation(fields: [contract_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user     Users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, contract_id])
+  @@index([contract_id], map: "idx_assistant_contracts_contract_id")
+  @@index([user_id, contract_id], map: "idx_assistant_contracts_user_contract")
+  @@map("assistant_contracts")
+  @@schema("public")
+}

@@ -1,0 +1,25 @@
+// ===========================================================================
+// Table public.product_categories
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ProductCategories {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  import_key   String
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  regional_id  String   @db.Uuid
+  external_key String?  @db.Char(8)
+  active       Boolean  @default(true)
+
+  regional                             Regionals                           @relation(fields: [regional_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  contract_category_product_categories ContractCategoryProductCategories[]
+  contract_product_category_budgets    ContractProductCategoryBudgets[]
+  products                             Products[]
+
+  @@unique([regional_id, import_key], map: "idx_product_categories_regional_import_key")
+  @@index([regional_id], map: "idx_product_categories_regional_id")
+  @@index([regional_id, name], map: "idx_product_categories_regional_name")
+  @@map("product_categories")
+  @@schema("public")
+}

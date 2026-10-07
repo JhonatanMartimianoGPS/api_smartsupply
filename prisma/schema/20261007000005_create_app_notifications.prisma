@@ -1,0 +1,22 @@
+// ===========================================================================
+// Table public.app_notifications
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model AppNotifications {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  type       String
+  title      String
+  message    String
+  link_url   String?
+  metadata   Json?    @default("{}")
+  read       Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, created_at(sort: Desc)], map: "idx_app_notifications_user_created")
+  @@map("app_notifications")
+  @@schema("public")
+}

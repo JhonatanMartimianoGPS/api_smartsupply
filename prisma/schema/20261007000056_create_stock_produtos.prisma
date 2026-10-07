@@ -1,0 +1,30 @@
+// ===========================================================================
+// Table stock.produtos
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockProdutos {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo                 String    @unique @db.VarChar(50)
+  nome                   String    @db.VarChar(200)
+  estoque_minimo         Int       @default(0)
+  custo_unitario_inicial Decimal?  @db.Decimal(10, 2)
+  unidade_medida         String    @db.VarChar(50)
+  data_cadastro          DateTime? @default(now()) @db.Timestamptz(6)
+  created_at             DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime? @default(now()) @db.Timestamptz(6)
+  foto_url               String?
+  grupo_id               String    @db.Uuid
+
+  grupo                               StockGrupos                       @relation(fields: [grupo_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stock_bridge_product_group_products StockBridgeProductGroupProducts[]
+  stock_entradas                      StockEntradas[]
+  stock_gastos                        StockGastos[]
+  stock_saidas                        StockSaidas[]
+
+  @@index([grupo_id], map: "idx_stock_produtos_grupo_id")
+  @@index([nome], map: "idx_stock_produtos_nome")
+  @@index([grupo_id])
+  @@map("produtos")
+  @@schema("stock")
+}

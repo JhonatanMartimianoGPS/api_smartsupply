@@ -1,0 +1,32 @@
+// ===========================================================================
+// Table stock.inventario_itens
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockInventarioItens {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupo_id            String    @db.Uuid
+  patrimonio          String
+  tipo_item           String
+  serial              String?
+  descricao           String?
+  profissional_id     String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  foto_url            String?
+  marca               String?
+  modelo              String?
+  data_aquisicao      DateTime? @db.Date
+  sistema_operacional String?
+  valor_original      Decimal?  @db.Decimal
+
+  grupo                   StockGrupos             @relation(fields: [grupo_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  profissional            StockProfissionais?     @relation(fields: [profissional_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stock_inventario_fluxos StockInventarioFluxos[]
+
+  @@unique([grupo_id, patrimonio], map: "inventario_itens_grupo_patrimonio_uq")
+  @@index([grupo_id])
+  @@index([profissional_id])
+  @@map("inventario_itens")
+  @@schema("stock")
+}

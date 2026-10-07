@@ -1,0 +1,23 @@
+// ===========================================================================
+// Table public.contract_budget_periods
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ContractBudgetPeriods {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contract_id    String   @db.Uuid
+  period_month   DateTime @db.Date
+  monthly_budget Decimal  @default(0) @db.Decimal(12, 2)
+  used_budget    Decimal  @default(0) @db.Decimal(12, 2)
+  budget_locked  Boolean  @default(false)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  contract Contracts @relation(fields: [contract_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([contract_id, period_month])
+  @@index([contract_id, period_month], map: "idx_contract_budget_periods_composite")
+  @@index([contract_id, period_month(sort: Desc)], map: "idx_contract_budget_periods_contract_period")
+  @@map("contract_budget_periods")
+  @@schema("public")
+}

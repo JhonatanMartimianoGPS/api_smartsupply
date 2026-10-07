@@ -1,0 +1,31 @@
+// ===========================================================================
+// Table public.commercial_simulations
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model CommercialSimulations {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                   String
+  client_name             String
+  state                   String   @default("DF")
+  segment                 String   @default("Geral")
+  postos                  Json     @default("[]")
+  encargos_pct            Decimal  @default(78.5) @db.Decimal
+  beneficios_por_colab    Decimal  @default(650.0) @db.Decimal
+  insumos_uniforme_mensal Decimal  @default(1800.0) @db.Decimal
+  margem_lucro_pct        Decimal  @default(14.0) @db.Decimal
+  impostos_pct            Decimal  @default(14.25) @db.Decimal
+  total_headcount         Int      @default(0)
+  faturamento_mensal      Decimal  @default(0) @db.Decimal
+  faturamento_anual       Decimal  @default(0) @db.Decimal
+  calculation_details     Json?
+  created_by              String?  @db.Uuid
+  created_at              DateTime @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime @default(now()) @db.Timestamptz(6)
+
+  created_by_ref Users? @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_commercial_simulations_created")
+  @@map("commercial_simulations")
+  @@schema("public")
+}

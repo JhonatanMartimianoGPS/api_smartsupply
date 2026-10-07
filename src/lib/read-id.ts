@@ -1,10 +1,12 @@
 import { HttpError } from './errors';
 
-// Reads the :id from the URL and ensures it is a positive integer
-export function readId(req) {
-  const id = Number(req.params.id);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  if (!Number.isInteger(id) || id <= 0) {
+// Reads the :id from the URL and ensures it is a valid UUID
+export function readId(req) {
+  const id = req.params.id;
+
+  if (typeof id !== 'string' || !UUID.test(id)) {
     throw new HttpError('Invalid ID', 400);
   }
 

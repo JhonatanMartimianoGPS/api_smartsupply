@@ -1,0 +1,25 @@
+// ===========================================================================
+// Table public.product_history
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model ProductHistory {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  product_id     String?  @db.Uuid
+  regional_id    String?  @db.Uuid
+  actor_user_id  String?  @db.Uuid
+  action         String
+  product_codigo String?
+  product_name   String?
+  details        Json     @default("{}")
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  actor_user Users?     @relation(fields: [actor_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  regional   Regionals? @relation(fields: [regional_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_product_history_created_at")
+  @@index([product_id, created_at(sort: Desc)], map: "idx_product_history_product_id")
+  @@index([regional_id, created_at(sort: Desc)], map: "idx_product_history_regional_id")
+  @@map("product_history")
+  @@schema("public")
+}

@@ -1,0 +1,22 @@
+// ===========================================================================
+// Table stock.bridge_product_group_products
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockBridgeProductGroupProducts {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bridge_product_id String   @db.Uuid
+  stock_grupo_id    String   @db.Uuid
+  stock_produto_id  String   @db.Uuid
+  origem_automatica Boolean  @default(false)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  stock_grupo   StockGrupos   @relation(fields: [stock_grupo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  stock_produto StockProdutos @relation(fields: [stock_produto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([bridge_product_id, stock_grupo_id], map: "bridge_product_group_products_bridge_product_stock_group_key")
+  @@index([stock_produto_id])
+  @@map("bridge_product_group_products")
+  @@schema("stock")
+}

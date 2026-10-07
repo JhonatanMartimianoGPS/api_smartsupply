@@ -1,0 +1,22 @@
+// ===========================================================================
+// Table public.system_modules_config
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model SystemModulesConfig {
+  id          String    @id
+  name        String
+  description String
+  category    String
+  is_enabled  Boolean   @default(true)
+  icon        String
+  route       String
+  badge       String?
+  updated_at  DateTime? @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  updated_by  String?   @db.Uuid
+
+  updated_by_ref Users? @relation(fields: [updated_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("system_modules_config")
+  @@schema("public")
+}

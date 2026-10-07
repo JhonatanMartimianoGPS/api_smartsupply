@@ -1,0 +1,86 @@
+// ===========================================================================
+// Enums (types)
+// Extensions and schemas are declared in base.prisma (datasource).
+// ===========================================================================
+
+enum AppRole {
+  suprimentos
+  assistente
+  admin
+  super_admin
+  gestor
+  colaborador
+  comercial
+
+  @@map("app_role")
+  @@schema("public")
+}
+
+enum SolicitationStatus {
+  pendente
+  aguardando_revisao
+  concluido
+  rejeitado
+
+  @@map("solicitation_status")
+  @@schema("public")
+}
+
+enum SolicitationStep {
+  aguardando_aprovacao_gestor
+  aguardando_compra_suprimentos
+  aguardando_revisao_gestor
+  aguardando_finalizacao_suprimentos
+  concluido
+  rejeitado
+
+  @@map("solicitation_step")
+  @@schema("public")
+}
+
+enum RoomsAccessRequestStatus {
+  pending
+  approved
+  rejected
+
+  @@map("access_request_status")
+  @@schema("rooms")
+}
+
+enum RoomsAppRole {
+  user
+  director
+  admin
+
+  @@map("app_role")
+  @@schema("rooms")
+}
+
+enum RoomsBookingStatus {
+  pending
+  confirmed
+  rejected
+  cancelled
+
+  @@map("booking_status")
+  @@schema("rooms")
+}
+
+enum StockAppRole {
+  admin
+  manager
+  user
+
+  @@map("app_role")
+  @@schema("stock")
+}
+
+enum StockGrupoVisualizacao {
+  estoque
+  inventario
+  ambas
+  operacional
+
+  @@map("grupo_visualizacao")
+  @@schema("stock")
+}

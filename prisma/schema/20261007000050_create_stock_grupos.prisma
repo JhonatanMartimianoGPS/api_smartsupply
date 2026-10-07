@@ -1,0 +1,30 @@
+// ===========================================================================
+// Table stock.grupos
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+model StockGrupos {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome               String                 @unique
+  created_at         DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?              @default(now()) @db.Timestamptz(6)
+  visualizacao       StockGrupoVisualizacao @default(estoque)
+  bridge_regional_id String?                @db.Uuid
+
+  bridge_regional                     Regionals?                        @relation(fields: [bridge_regional_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stock_bridge_order_stock_receipts   StockBridgeOrderStockReceipts[]
+  stock_centros_distribuicao          StockCentrosDistribuicao[]
+  stock_fornecedores                  StockFornecedores[]
+  stock_locais_armazenamento          StockLocaisArmazenamento[]
+  stock_bridge_contract_stock_groups  StockBridgeContractStockGroups[]
+  stock_produtos                      StockProdutos[]
+  stock_bridge_product_group_products StockBridgeProductGroupProducts[]
+  stock_profissionais                 StockProfissionais[]
+  stock_inventario_itens              StockInventarioItens[]
+  stock_user_grupos                   StockUserGrupos[]
+
+  @@index([bridge_regional_id])
+  @@index([visualizacao])
+  @@map("grupos")
+  @@schema("stock")
+}

@@ -1,0 +1,16 @@
+// ===========================================================================
+// Table public.app_config
+// Final consolidated version of the previous migrations.
+// ===========================================================================
+
+/// Configurações globais da aplicação gerenciadas pelo time de engenharia.
+model AppConfig {
+  /// Chave da configuração (ex: minimum_client_version).
+  key        String   @id
+  /// Valor da configuração como texto.
+  value      String
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("app_config")
+  @@schema("public")
+}
