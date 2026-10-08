@@ -185,7 +185,7 @@ export class NotificationService {
         this.staffOfRegional(params.contract.regionalId, params.actorId),
         this.managersOfContract(params.contract.id, params.contract.regionalId, params.actorId),
       ]);
-      await this.notifyUsers(staff, { ...base, link: `/suprimentos?tab=pedidos&openOrder=${params.orderId}` });
+      await this.notifyUsers(staff, { ...base, link: `/acompanhamento-pedidos?openOrder=${params.orderId}` });
       await this.notifyUsers(managers, { ...base, link: `/?openOrder=${params.orderId}` });
     });
   }
@@ -245,7 +245,7 @@ export class NotificationService {
         this.staffOfRegional(params.contract.regionalId, params.actorId),
         this.managersOfContract(params.contract.id, params.contract.regionalId, params.actorId),
       ]);
-      await this.notifyUsers(staff, { ...base, link: `/suprimentos?tab=solicitacoes&openSolicitation=${params.solicitationId}` });
+      await this.notifyUsers(staff, { ...base, link: `/acompanhamento-pedidos?tab=solicitacoes&openSolicitation=${params.solicitationId}` });
       await this.notifyUsers(managers, { ...base, link: `/?openSolicitation=${params.solicitationId}` });
     });
   }
