@@ -1,5 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
 import { productService } from "../services/product.service.js";
+import { accessService } from "../services/access.service.js";
+
+// Parâmetros de URL podem chegar como lista ou objeto (?a[b]=c): só aceitamos texto.
+// O byte nulo (%00) é recusado porque o PostgreSQL não o aceita em texto.
+const asString = (value: unknown) =>
+  typeof value === "string" && value !== "" && !value.includes("\0") ? value : undefined;
 
 /**
  * Normaliza o body de criação/edição de produto.
@@ -51,16 +57,31 @@ export class ProductController {
 
   async listPaginated(req: Request, res: Response, next: NextFunction) {
     try {
-      const { page, pageSize, regionalId, categoryId, supplierId, search } = req.query;
-      const active = req.query.active !== undefined ? req.query.active === "true" : undefined;
+      const q = req.query;
+      const page = asString(q.page);
+      const pageSize = asString(q.pageSize);
+      const tabela = asString(q.tabela);
+      // O frontend manda a lista de ids separada por vírgula
+      const productIds = asString(q.productIds)?.split(",").filter(Boolean).slice(0, 200);
+
+      // Produtos do contrato: por enquanto só a regional dele (e os globais). A disponibilidade
+      // produto a produto (contractCategoryId etc.) ainda não existe no modelo atual.
+      const contractId = asString(q.contractId);
+      const contract = contractId ? await accessService.assertContractAccess(req.user!, contractId) : undefined;
+
       const result = await productService.listPaginated({
         page: page ? Number(page) : undefined,
         pageSize: pageSize ? Number(pageSize) : undefined,
-        regionalId: regionalId as string,
-        categoryId: categoryId as string,
-        supplierId: supplierId as string,
-        search: search as string,
-        active,
+        regionalId: contract?.regionalId ?? asString(q.regionalId),
+        categoryId: asString(q.categoryId),
+        supplierId: asString(q.supplierId),
+        search: asString(q.search),
+        active: q.active !== undefined ? q.active === "true" : undefined,
+        category: asString(q.category),
+        fornecedor: asString(q.fornecedor),
+        tabela: tabela ? Number(tabela) : undefined,
+        productIds,
+        sort: asString(q.sort),
       });
       res.json(result);
     } catch (error) {
@@ -104,9 +125,9 @@ export class ProductController {
     }
   }
 
-  async getFilterOptions(_req: Request, res: Response, next: NextFunction) {
+  async getFilterOptions(req: Request, res: Response, next: NextFunction) {
     try {
-      const options = await productService.getFilterOptions();
+      const options = await productService.getFilterOptions({ regionalId: asString(req.query.regionalId) });
       res.json(options);
     } catch (error) {
       next(error);

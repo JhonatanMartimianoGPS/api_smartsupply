@@ -11,22 +11,25 @@ export class ProductService {
     search?: string;
     active?: boolean;
   }) {
-    const where: any = {};
+    // Cada filtro entra em AND: o OR da busca não pode sobrescrever o OR de regional
+    const and: any[] = [];
 
-    if (params?.active !== undefined) where.active = params.active;
+    if (params?.active !== undefined) and.push({ active: params.active });
     if (params?.regionalId) {
-      where.OR = [{ regionalId: params.regionalId }, { regionalId: null }];
+      and.push({ OR: [{ regionalId: params.regionalId }, { regionalId: null }] });
     }
-    if (params?.categoryId) where.categoryId = params.categoryId;
+    if (params?.categoryId) and.push({ categoryId: params.categoryId });
     if (params?.search) {
-      where.OR = [
-        { name: { contains: params.search, mode: "insensitive" } },
-        { codigo: { contains: params.search, mode: "insensitive" } },
-      ];
+      and.push({
+        OR: [
+          { name: { contains: params.search, mode: "insensitive" } },
+          { codigo: { contains: params.search, mode: "insensitive" } },
+        ],
+      });
     }
 
     const products = await prisma.product.findMany({
-      where,
+      where: and.length > 0 ? { AND: and } : {},
       include: {
         category: true,
         regional: true,
@@ -73,24 +76,70 @@ export class ProductService {
     supplierId?: string;
     search?: string;
     active?: boolean;
+    // Filtros que o frontend envia (herdados do Supabase)
+    category?: string; // id, código ou nome da categoria
+    fornecedor?: string; // nome do fornecedor
+    tabela?: number; // valor de tabela do produto
+    productIds?: string[];
+    sort?: string;
   }) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 20));
+    // Número de página seguro: "1e20" ou valores enormes estourariam o skip do Prisma
+    const rawPage = Math.floor(Number(params.page));
+    const page = Number.isFinite(rawPage) ? Math.min(Math.max(1, rawPage), 100000) : 1;
+    const pageSize = Math.max(1, Math.min(100, Math.floor(Number(params.pageSize)) || 20));
     const skip = (page - 1) * pageSize;
 
-    const where: any = {};
-    if (params.active !== undefined) where.active = params.active;
-    if (params.regionalId) {
-      where.OR = [{ regionalId: params.regionalId }, { regionalId: null }];
+    // Cada filtro entra em AND: um OR de busca não pode sobrescrever o OR de regional
+    const and: any[] = [];
+    // Produto desativado (apagado, mas com pedidos) não aparece no catálogo
+    and.push({ active: params.active ?? true });
+
+    // Produto da regional ou global (sem regional)
+    if (params.regionalId) and.push({ OR: [{ regionalId: params.regionalId }, { regionalId: null }] });
+
+    if (params.categoryId) and.push({ categoryId: params.categoryId });
+    if (params.category) {
+      and.push({
+        OR: [
+          { categoryId: params.category },
+          { category: { code: params.category } },
+          { category: { name: { equals: params.category, mode: "insensitive" } } },
+        ],
+      });
     }
-    if (params.categoryId) where.categoryId = params.categoryId;
-    if (params.supplierId) where.supplierId = params.supplierId;
+    if (params.supplierId) and.push({ supplierId: params.supplierId });
+    if (params.fornecedor) {
+      and.push({
+        supplier: {
+          OR: [
+            { name: { equals: params.fornecedor, mode: "insensitive" } },
+            { tradeName: { equals: params.fornecedor, mode: "insensitive" } },
+          ],
+        },
+      });
+    }
+    if (params.tabela !== undefined && Number.isFinite(params.tabela)) and.push({ tabela: params.tabela });
+    if (params.productIds?.length) and.push({ id: { in: params.productIds } });
     if (params.search) {
-      where.OR = [
-        { name: { contains: params.search, mode: "insensitive" } },
-        { codigo: { contains: params.search, mode: "insensitive" } },
-      ];
+      and.push({
+        OR: [
+          { name: { contains: params.search, mode: "insensitive" } },
+          { codigo: { contains: params.search, mode: "insensitive" } },
+        ],
+      });
     }
+    const where = and.length > 0 ? { AND: and } : {};
+
+    const sortOptions: Record<string, any> = {
+      "name-asc": { name: "asc" },
+      "name-desc": { name: "desc" },
+      "price-asc": { tabela: "asc" },
+      "price-desc": { tabela: "desc" },
+      "date-asc": { createdAt: "asc" },
+      "date-desc": { createdAt: "desc" },
+    };
+    // hasOwn: "constructor" ou "toString" não podem virar ordenação
+    const orderBy = params.sort && Object.hasOwn(sortOptions, params.sort) ? sortOptions[params.sort] : sortOptions["name-asc"];
 
     const [total, products] = await Promise.all([
       prisma.product.count({ where }),
@@ -99,11 +148,11 @@ export class ProductService {
         skip,
         take: pageSize,
         include: {
-          category: true,
-          regional: true,
-          supplier: true,
+          category: { select: { id: true, name: true, code: true } },
+          regional: { select: { id: true, name: true, code: true } },
+          supplier: { select: { name: true, tradeName: true } },
         },
-        orderBy: { name: "asc" },
+        orderBy,
       }),
     ]);
 
@@ -117,10 +166,14 @@ export class ProductService {
       valor_unitario: Number(p.tabela),
       categoria: p.category?.name || "Geral",
       product_category_id: p.categoryId,
+      product_category: p.category,
       regional_id: p.regionalId,
+      regional: p.regional,
       fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
       image_url: p.imageUrl,
       active: p.active,
+      created_at: p.createdAt.toISOString(),
+      updated_at: p.updatedAt.toISOString(),
     }));
 
     return {
@@ -129,6 +182,9 @@ export class ProductService {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
+      // Transitório: o frontend herdado do Supabase lê estes nomes (products e totalCount)
+      products: items,
+      totalCount: total,
     };
   }
 
@@ -304,22 +360,36 @@ export class ProductService {
   /**
    * Opções distintas para filtros de catálogo
    */
-  async getFilterOptions() {
-    const [suppliers, tables] = await Promise.all([
+  async getFilterOptions(params: { regionalId?: string } = {}) {
+    // Opções vindas dos produtos ativos da regional (e globais), para o filtro nunca mostrar opção vazia
+    const inScope: any = { active: true };
+    if (params.regionalId) inScope.OR = [{ regionalId: params.regionalId }, { regionalId: null }];
+
+    const [suppliers, prices, categories] = await Promise.all([
       prisma.registeredSupplier.findMany({
-        where: { active: true },
-        select: { id: true, name: true, tradeName: true },
+        where: { products: { some: inScope } },
+        select: { name: true, tradeName: true },
       }),
-      prisma.product.findMany({
-        where: { active: true },
-        select: { tabela: true },
-        distinct: ["tabela"],
+      prisma.product.groupBy({ by: ["tabela"], where: inScope, orderBy: { tabela: "asc" } }),
+      prisma.productCategory.findMany({
+        where: { products: { some: inScope } },
+        select: { name: true },
       }),
     ]);
 
+    // Sem repetidos (a tela usa o valor como chave) e na ordem alfabética do português
+    const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const supplierNames = unique(suppliers.map((s) => s.tradeName || s.name));
+    const tables = prices.map((p) => Number(p.tabela)).filter((v) => v > 0);
+    const categoryNames = unique(categories.map((c) => c.name));
+
     return {
-      suppliers: suppliers.map((s) => s.tradeName || s.name),
-      tables: tables.map((t) => Number(t.tabela)).filter((v) => v > 0),
+      suppliers: supplierNames,
+      tables,
+      // Transitório: nomes que o frontend herdado do Supabase lê
+      fornecedores: supplierNames,
+      tabelas: tables,
+      categories: categoryNames,
     };
   }
 
