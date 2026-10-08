@@ -1,10 +1,27 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, Prisma } from "@prisma/client";
 import { auditService } from "./audit.service.js";
 import { accessService, type AccessUser } from "./access.service.js";
 
 export class OrderService {
+  /**
+   * Garante que o pedido existe e está no escopo do usuário (404 caso contrário).
+   * O id pode vir do body, então precisa ser validado.
+   */
+  private async assertOrderAccess(user: AccessUser, orderId: string) {
+    if (typeof orderId !== "string" || !orderId) {
+      throw new AppError(400, "Pedido é obrigatório.");
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contract: accessService.contractFilter(user) },
+      select: { id: true },
+    });
+    if (!order) {
+      throw new AppError(404, "Pedido não encontrado.");
+    }
+  }
+
   /**
    * Lista pedidos com filtros operacionais
    */
@@ -200,7 +217,7 @@ export class OrderService {
    * Criação de Pedido Mensal Regular
    */
   async createMonthlyOrder(
-    userId: string,
+    user: AccessUser,
     data: {
       contract_id?: string;
       contractId?: string;
@@ -225,10 +242,8 @@ export class OrderService {
     const mes = data.mes || now.getMonth() + 1;
     const ano = data.ano || now.getFullYear();
 
-    const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-    if (!contract) {
-      throw new AppError(404, "Contrato não encontrado.");
-    }
+    await accessService.assertContractAccess(user, contractId);
+    const userId = user.userId;
 
     // Calcula os snapshots e totais dos itens
     let totalAmount = 0;
@@ -305,7 +320,7 @@ export class OrderService {
    * Criação de Pedido Extra
    */
   async createExtraOrder(
-    userId: string,
+    user: AccessUser,
     data: {
       contract_id?: string;
       contractId?: string;
@@ -326,6 +341,9 @@ export class OrderService {
     if (!contractId) {
       throw new AppError(400, "Contrato é obrigatório.");
     }
+
+    await accessService.assertContractAccess(user, contractId);
+    const userId = user.userId;
 
     const now = new Date();
     const mes = data.mes || now.getMonth() + 1;
@@ -405,15 +423,16 @@ export class OrderService {
    * Atualização de status do pedido (Aprovar, Rejeitar, Entregar)
    */
   async updateStatus(
+    user: AccessUser,
     orderId: string,
-    userId: string,
     data: {
       status: OrderStatus;
       notes?: string;
     },
   ) {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const userId = user.userId;
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contract: accessService.contractFilter(user) },
       include: { contract: true },
     });
 
@@ -435,21 +454,30 @@ export class OrderService {
 
     // Transação atômica ACID: se qualquer etapa falhar, reverte todas
     const updated = await prisma.$transaction(async (tx) => {
-      // 1. Atualiza status do pedido e registra auditoria no histórico
-      const res = await tx.order.update({
-        where: { id: orderId },
+      // 1. Troca o status só se ele ainda for o que lemos. Sem isso, dois cliques simultâneos
+      // aprovariam duas vezes e debitariam o orçamento duas vezes.
+      const changed = await tx.order.updateMany({
+        where: { id: orderId, status: oldStatus },
+        data: { status: newStatus },
+      });
+      if (changed.count === 0) {
+        throw new AppError(409, "O status do pedido foi alterado por outra pessoa. Atualize a página e tente de novo.");
+      }
+
+      // 2. Registra auditoria no histórico
+      await tx.orderHistory.create({
         data: {
-          status: newStatus,
-          history: {
-            create: {
-              userId,
-              action: `Transição de Status: ${oldStatus} -> ${newStatus}`,
-              details: data.notes || null,
-              oldStatus,
-              newStatus,
-            },
-          },
+          orderId,
+          userId,
+          action: `Transição de Status: ${oldStatus} -> ${newStatus}`,
+          details: data.notes || null,
+          oldStatus,
+          newStatus,
         },
+      });
+
+      const res = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
         include: {
           contract: { include: { regional: true, category: true } },
           createdBy: { select: { id: true, name: true, email: true } },
@@ -585,19 +613,34 @@ export class OrderService {
    * Atualização de itens de um pedido
    */
   async updateItems(
+    user: AccessUser,
     orderId: string,
     items: Array<{ product_id: string; quantity: number; unit_price: number }>,
   ) {
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!accessService.isSuprimentos(user)) {
+      throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem editar os itens do pedido.");
+    }
+    // Lista vazia apagaria todos os itens do pedido
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError(400, "O pedido precisa conter ao menos um item.");
+    }
+    if (items.some((it) => !it || typeof it.product_id !== "string" || !Number.isInteger(it.quantity) || it.quantity <= 0)) {
+      throw new AppError(400, "Os itens informados são inválidos.");
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contract: accessService.contractFilter(user) },
+      select: { id: true, status: true },
+    });
     if (!order) {
       throw new AppError(404, "Pedido não encontrado.");
     }
-
-    // Remove itens antigos e recria com novos valores
-    await prisma.orderItem.deleteMany({ where: { orderId } });
+    if (order.status !== "pendente") {
+      throw new AppError(400, "Apenas pedidos pendentes podem ter itens editados.");
+    }
 
     let newTotal = 0;
-    const itemsToCreate = [];
+    const itemsToCreate: Prisma.OrderItemCreateManyInput[] = [];
 
     for (const it of items) {
       const prod = await prisma.product.findUnique({
@@ -623,10 +666,19 @@ export class OrderService {
       });
     }
 
-    await prisma.orderItem.createMany({ data: itemsToCreate });
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { totalAmount: newTotal },
+    // Remove os itens antigos e recria: tudo junto, para não perder os itens se algo falhar.
+    // O pedido só é atualizado se ainda estiver pendente (uma aprovação simultânea faria o
+    // débito do orçamento usar o total antigo).
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: orderId, status: "pendente" },
+        data: { totalAmount: newTotal },
+      });
+      if (updated.count === 0) {
+        throw new AppError(409, "O pedido deixou de estar pendente. Atualize a página e tente de novo.");
+      }
+      await tx.orderItem.deleteMany({ where: { orderId } });
+      await tx.orderItem.createMany({ data: itemsToCreate });
     });
 
     return { orderId, newTotal };
@@ -662,7 +714,13 @@ export class OrderService {
     }));
   }
 
-  async addHistory(orderId: string, userId: string, data: { action: string; details?: string | null }) {
+  async addHistory(user: AccessUser, orderId: string, data: { action: string; details?: string | null }) {
+    await this.assertOrderAccess(user, orderId);
+    if (typeof data?.action !== "string" || !data.action.trim()) {
+      throw new AppError(400, "A ação do histórico é obrigatória.");
+    }
+
+    const userId = user.userId;
     const entry = await prisma.orderHistory.create({
       data: {
         orderId,
@@ -684,16 +742,31 @@ export class OrderService {
   /**
    * Exclusão de pedido
    */
-  async deleteOrder(id: string) {
-    const order = await prisma.order.findUnique({ where: { id } });
+  async deleteOrder(user: AccessUser, id: string) {
+    const order = await prisma.order.findFirst({
+      where: { id, contract: accessService.contractFilter(user) },
+      select: { id: true, status: true, isExtraOrder: true },
+    });
     if (!order) {
       throw new AppError(404, "Pedido não encontrado.");
     }
-    if (order.status !== "pendente" && order.status !== "rejeitado" && order.status !== "cancelado") {
-      throw new AppError(400, "Apenas pedidos pendentes, rejeitados ou cancelados podem ser excluídos.");
+
+    // Regras herdadas do Supabase (cancelado vale como rejeitado):
+    // - pedido extra: suprimentos ou admin, se estiver pendente, rejeitado ou cancelado
+    // - pedido mensal: só admin, se estiver rejeitado ou cancelado
+    const canDelete = order.isExtraOrder
+      ? accessService.isSuprimentos(user) && ["pendente", "rejeitado", "cancelado"].includes(order.status)
+      : accessService.isAdmin(user) && ["rejeitado", "cancelado"].includes(order.status);
+    if (!canDelete) {
+      throw new AppError(403, "Seu perfil não pode excluir este pedido neste status.");
     }
 
-    await prisma.order.delete({ where: { id } });
+    // Só apaga se o status ainda for o que validamos (um pedido aprovado no meio do caminho
+    // seria apagado sem estornar o orçamento)
+    const deleted = await prisma.order.deleteMany({ where: { id, status: order.status } });
+    if (deleted.count === 0) {
+      throw new AppError(409, "O pedido foi alterado por outra pessoa. Atualize a página e tente de novo.");
+    }
     return { orderId: id };
   }
 
@@ -708,17 +781,32 @@ export class OrderService {
     });
   }
 
-  async createDeliveryDivergence(userId: string, data: { orderId: string; description: string }) {
+  async createDeliveryDivergence(user: AccessUser, data: { orderId: string; description: string }) {
+    await this.assertOrderAccess(user, data.orderId);
+    if (typeof data.description !== "string" || !data.description.trim()) {
+      throw new AppError(400, "A descrição da divergência é obrigatória.");
+    }
     return prisma.orderDeliveryDivergence.create({
       data: {
         orderId: data.orderId,
-        reportedById: userId,
+        reportedById: user.userId,
         description: data.description,
       },
     });
   }
 
-  async resolveDeliveryDivergence(id: string, notes?: string) {
+  async resolveDeliveryDivergence(user: AccessUser, id: string, notes?: string) {
+    if (!accessService.isSuprimentos(user)) {
+      throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem resolver divergências.");
+    }
+    const divergence = await prisma.orderDeliveryDivergence.findFirst({
+      where: { id, order: { contract: accessService.contractFilter(user) } },
+      select: { id: true },
+    });
+    if (!divergence) {
+      throw new AppError(404, "Divergência não encontrada.");
+    }
+
     return prisma.orderDeliveryDivergence.update({
       where: { id },
       data: {
@@ -732,7 +820,11 @@ export class OrderService {
   // ─── Relatos de Problemas ───────────────────────────────────────────────────
   async listIssueReports(user: AccessUser) {
     return prisma.orderIssueReport.findMany({
-      where: { order: { contract: accessService.contractFilter(user) } },
+      // Suprimentos e admin veem os relatos dos contratos que acessam; os demais, só os próprios
+      where: {
+        order: { contract: accessService.contractFilter(user) },
+        ...(accessService.isSuprimentos(user) ? {} : { reportedById: user.userId }),
+      },
       include: {
         order: { include: { contract: true } },
       },
@@ -740,23 +832,41 @@ export class OrderService {
     });
   }
 
-  async createIssueReport(userId: string, data: { orderId: string; description: string }) {
+  async createIssueReport(user: AccessUser, data: { orderId: string; description: string }) {
+    await this.assertOrderAccess(user, data.orderId);
+    if (typeof data.description !== "string" || !data.description.trim()) {
+      throw new AppError(400, "A descrição do relato é obrigatória.");
+    }
     return prisma.orderIssueReport.create({
       data: {
         orderId: data.orderId,
-        reportedById: userId,
+        reportedById: user.userId,
         description: data.description,
       },
     });
   }
 
-  async updateIssueReportStatus(id: string, status: string, notes?: string) {
+  async updateIssueReportStatus(user: AccessUser, id: string, status: string, notes?: string) {
+    if (!accessService.isSuprimentos(user)) {
+      throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem atualizar relatos.");
+    }
+    const report = await prisma.orderIssueReport.findFirst({
+      where: { id, order: { contract: accessService.contractFilter(user) } },
+      select: { id: true },
+    });
+    if (!report) {
+      throw new AppError(404, "Relato não encontrado.");
+    }
+    if (typeof status !== "string" || !status.trim()) {
+      throw new AppError(400, "O status do relato é obrigatório.");
+    }
+
     return prisma.orderIssueReport.update({
       where: { id },
       data: {
         status,
         notes,
-        resolvedAt: status === "resolvido" ? new Date() : undefined,
+        resolvedAt: ["resolvido", "resolved"].includes(status) ? new Date() : undefined,
       },
     });
   }

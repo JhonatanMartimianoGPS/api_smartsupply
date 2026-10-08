@@ -57,8 +57,7 @@ export class OrderController {
 
   async createMonthly(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const order = await orderService.createMonthlyOrder(userId, req.body);
+      const order = await orderService.createMonthlyOrder(req.user!, req.body);
       res.status(201).json(order);
     } catch (error) {
       next(error);
@@ -67,8 +66,7 @@ export class OrderController {
 
   async createExtra(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const order = await orderService.createExtraOrder(userId, req.body);
+      const order = await orderService.createExtraOrder(req.user!, req.body);
       res.status(201).json(order);
     } catch (error) {
       next(error);
@@ -77,8 +75,7 @@ export class OrderController {
 
   async updateStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const result = await orderService.updateStatus(req.params.id as string, userId, req.body);
+      const result = await orderService.updateStatus(req.user!, req.params.id as string, req.body);
       res.json(result);
     } catch (error) {
       next(error);
@@ -98,7 +95,7 @@ export class OrderController {
   async updateItems(req: Request, res: Response, next: NextFunction) {
     try {
       const { items } = req.body;
-      const result = await orderService.updateItems(req.params.id as string, items || []);
+      const result = await orderService.updateItems(req.user!, req.params.id as string, items || []);
       res.json(result);
     } catch (error) {
       next(error);
@@ -116,8 +113,7 @@ export class OrderController {
 
   async addHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const result = await orderService.addHistory(req.params.id as string, userId, req.body);
+      const result = await orderService.addHistory(req.user!, req.params.id as string, req.body);
       res.json(result);
     } catch (error) {
       next(error);
@@ -126,7 +122,7 @@ export class OrderController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await orderService.deleteOrder(req.params.id as string);
+      const result = await orderService.deleteOrder(req.user!, req.params.id as string);
       res.json(result);
     } catch (error) {
       next(error);
@@ -145,8 +141,7 @@ export class OrderController {
 
   async createDivergence(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const divergence = await orderService.createDeliveryDivergence(userId, req.body);
+      const divergence = await orderService.createDeliveryDivergence(req.user!, req.body);
       res.status(201).json(divergence);
     } catch (error) {
       next(error);
@@ -155,7 +150,7 @@ export class OrderController {
 
   async resolveDivergence(req: Request, res: Response, next: NextFunction) {
     try {
-      const divergence = await orderService.resolveDeliveryDivergence(req.params.id as string, req.body.notes);
+      const divergence = await orderService.resolveDeliveryDivergence(req.user!, req.params.id as string, req.body.notes);
       res.json(divergence);
     } catch (error) {
       next(error);
@@ -174,8 +169,7 @@ export class OrderController {
 
   async createIssueReport(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const issue = await orderService.createIssueReport(userId, req.body);
+      const issue = await orderService.createIssueReport(req.user!, req.body);
       res.status(201).json(issue);
     } catch (error) {
       next(error);
@@ -185,7 +179,7 @@ export class OrderController {
   async updateIssueReportStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const { status, notes } = req.body;
-      const issue = await orderService.updateIssueReportStatus(req.params.id as string, status, notes);
+      const issue = await orderService.updateIssueReportStatus(req.user!, req.params.id as string, status, notes);
       res.json(issue);
     } catch (error) {
       next(error);

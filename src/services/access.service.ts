@@ -18,6 +18,16 @@ export interface AccessUser {
  * token expirar. Só o perfil (role) vem do token.
  */
 export class AccessService {
+  /** Equivalente ao is_admin() do Supabase: admin e super_admin. */
+  isAdmin(user: AccessUser) {
+    return user.role === "admin" || user.role === "super_admin";
+  }
+
+  /** Equivalente ao is_suprimentos() do Supabase: suprimentos e admin. */
+  isSuprimentos(user: AccessUser) {
+    return user.role === "suprimentos" || this.isAdmin(user);
+  }
+
   /**
    * Filtro do Prisma para a tabela de contratos. Serve para listagens:
    * prisma.order.findMany({ where: { contract: accessService.contractFilter(user) } })

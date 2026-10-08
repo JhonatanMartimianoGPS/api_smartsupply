@@ -21,14 +21,14 @@ router.post("/items/query", (req, res, next) => orderController.queryItems(req, 
 // Divergências de entrega
 router.get("/delivery-divergences", (req, res, next) => orderController.listDivergences(req, res, next));
 router.post("/delivery-divergences", (req, res, next) => orderController.createDivergence(req, res, next));
-router.patch("/delivery-divergences/:id/resolve", (req, res, next) =>
+router.patch("/delivery-divergences/:id/resolve", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
   orderController.resolveDivergence(req, res, next),
 );
 
 // Relatos de problemas
 router.get("/issue-reports", (req, res, next) => orderController.listIssueReports(req, res, next));
 router.post("/issue-reports", (req, res, next) => orderController.createIssueReport(req, res, next));
-router.patch("/issue-reports/:id/status", (req, res, next) =>
+router.patch("/issue-reports/:id/status", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
   orderController.updateIssueReportStatus(req, res, next),
 );
 
@@ -45,7 +45,9 @@ router.post("/extra", validate(createExtraOrderSchema), (req, res, next) =>
 
 // Operações por ID
 router.get("/:id", (req, res, next) => orderController.getById(req, res, next));
-router.put("/:id/items", (req, res, next) => orderController.updateItems(req, res, next));
+router.put("/:id/items", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
+  orderController.updateItems(req, res, next),
+);
 router.patch(
   "/:id/status",
   authorize(["super_admin", "admin", "gestor", "suprimentos"]),
