@@ -1,0 +1,25 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. TRILHA DE AUDITORIA GLOBAL & CONFORMIDADE CORPORATIVA (LGPD / SOX)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String   // CREATE, UPDATE, DELETE, LOGIN, APPROVE, REJECT, EXPORT
+  entity     String   // Order, Contract, Product, User, StockEntrada, ServiceTicket
+  entityId   String?  @map("entity_id")
+  details    String?
+  diffBefore Json?    @map("diff_before")
+  diffAfter  Json?    @map("diff_after")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,129 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. CONTRATOS, CATEGORIAS & ORÇAMENTOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ContractCategory {
+  id          String   @id @default(uuid())
+  name        String
+  color       String?  @default("#3B82F6")
+  regionalId  String?  @map("regional_id")
+  active      Boolean  @default(true)
+  externalKey String?  @map("external_key")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  regional  Regional?  @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  contracts Contract[]
+  productCategoryLinks ContractCategoryProductCategoryLink[]
+
+  @@map("contract_categories")
+}
+
+model Contract {
+  id                             String   @id @default(uuid())
+  name                           String
+  code                           String?
+  regionalId                     String   @map("regional_id")
+  categoryId                     String?  @map("category_id")
+  totalBudget                    Decimal  @default(0) @map("total_budget") @db.Decimal(12, 2)
+  usedBudget                     Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  unlimitedBudget                Boolean  @default(false) @map("unlimited_budget")
+  allowExtraOrder                Boolean  @default(true) @map("allow_extra_order")
+  allowCustomPrices              Boolean  @default(false) @map("allow_custom_prices")
+  allowUnlimitedItemsSolicitation Boolean  @default(false) @map("allow_unlimited_items_solicitation")
+  maxItemsPerSolicitation        Int?     @map("max_items_per_solicitation")
+  budgetLocked                   Boolean  @default(false) @map("budget_locked")
+  active                         Boolean  @default(true)
+  externalKey                    String?  @map("external_key")
+  createdAt                      DateTime @default(now()) @map("created_at")
+  updatedAt                      DateTime @updatedAt @map("updated_at")
+
+  regional               Regional                        @relation(fields: [regionalId], references: [id], onDelete: Restrict)
+  category               ContractCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  users                  UserContract[]
+  orders                 Order[]
+  tickets                ServiceTicket[]
+  budgetPeriods          ContractBudgetPeriod[]
+  productCategoryBudgets ContractProductCategoryBudget[]
+  solicitations          Solicitation[]
+  stockGrupos            StockGrupo[]
+  stockCentros           StockCentroDistribuicao[]
+
+  @@map("contracts")
+}
+
+model UserContract {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  contractId String   @map("contract_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contractId])
+  @@map("user_contracts")
+}
+
+model ContractBudgetPeriod {
+  id            String   @id @default(uuid())
+  contractId    String   @map("contract_id")
+  periodMonth   String   @map("period_month") // YYYY-MM
+  monthlyBudget Decimal  @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  usedBudget    Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  budgetLocked  Boolean  @default(false) @map("budget_locked")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodMonth])
+  @@map("contract_budget_periods")
+}
+
+model ContractProductCategoryBudget {
+  id                String    @id @default(uuid())
+  contractId        String    @map("contract_id")
+  productCategoryId String    @map("product_category_id")
+  monthlyBudget     Decimal   @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  active            Boolean   @default(true)
+  deactivatedAt     DateTime? @map("deactivated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  contract        Contract                            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  productCategory ProductCategory                     @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+  periods         ContractProductCategoryBudgetPeriod[]
+
+  @@unique([contractId, productCategoryId])
+  @@map("contract_product_category_budgets")
+}
+
+model ContractProductCategoryBudgetPeriod {
+  id                               String   @id @default(uuid())
+  contractProductCategoryBudgetId  String   @map("contract_product_category_budget_id")
+  contractId                       String   @map("contract_id")
+  periodMonth                      String   @map("period_month") // YYYY-MM
+  monthlyBudget                    Decimal  @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  usedBudget                       Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  createdAt                        DateTime @default(now()) @map("created_at")
+  updatedAt                        DateTime @updatedAt @map("updated_at")
+
+  budget ContractProductCategoryBudget @relation(fields: [contractProductCategoryBudgetId], references: [id], onDelete: Cascade)
+
+  @@unique([contractProductCategoryBudgetId, periodMonth])
+  @@map("contract_product_category_budget_periods")
+}
+
+model ContractCategoryProductCategoryLink {
+  id                 String   @id @default(uuid())
+  contractCategoryId String   @map("contract_category_id")
+  productCategoryId  String   @map("product_category_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  contractCategory ContractCategory @relation(fields: [contractCategoryId], references: [id], onDelete: Cascade)
+  productCategory  ProductCategory  @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([contractCategoryId, productCategoryId])
+  @@map("contract_category_product_category_links")
+}

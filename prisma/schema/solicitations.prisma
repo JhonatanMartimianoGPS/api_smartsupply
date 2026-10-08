@@ -1,0 +1,52 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. SOLICITAÇÕES ESPECIAIS (FORA DE CATÁLOGO)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Solicitation {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  createdById String   @map("created_by")
+  status      String   @default("pendente") // pendente, em_analise, aprovada, rejeitada
+  step        String   @default("gestor")   // gestor, suprimentos, finalizado
+  notes       String?
+  totalAmount Decimal  @default(0) @map("total_amount") @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  contract  Contract              @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  createdBy User                  @relation("SolicitationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     SolicitationItem[]
+  history   SolicitationHistory[]
+
+  @@map("solicitations")
+}
+
+model SolicitationItem {
+  id             String   @id @default(uuid())
+  solicitationId String   @map("solicitation_id")
+  productId      String?  @map("product_id")
+  description    String?
+  quantity       Int      @default(1)
+  unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  solicitation Solicitation @relation(fields: [solicitationId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("solicitation_items")
+}
+
+model SolicitationHistory {
+  id             String   @id @default(uuid())
+  solicitationId String   @map("solicitation_id")
+  userId         String   @map("user_id")
+  action         String
+  step           String?
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  solicitation Solicitation @relation(fields: [solicitationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("solicitation_history")
+}

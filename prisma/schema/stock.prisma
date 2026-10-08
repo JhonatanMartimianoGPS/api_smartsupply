@@ -1,0 +1,207 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. MÓDULO DE CONTROLE DE ESTOQUE (WMS) — UNIFICADO NO SCHEMA PRINCIPAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum GrupoVisualizacao {
+  estoque
+  inventario
+  ambas
+  operacional
+}
+
+model StockGrupo {
+  id           String            @id @default(uuid())
+  nome         String
+  visualizacao GrupoVisualizacao @default(ambas)
+  regionalId   String?           @map("regional_id")
+  contractId   String?           @map("contract_id")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  regional        Regional?                 @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  contract        Contract?                 @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  centros         StockCentroDistribuicao[]
+  locais          StockLocalArmazenamento[]
+  produtos        StockProduto[]
+  patrimonioItens StockPatrimonioItem[]
+
+  @@map("stock_grupos")
+}
+
+model StockCentroDistribuicao {
+  id          String   @id @default(uuid())
+  nome        String
+  endereco    String?
+  responsavel String?
+  telefone    String?
+  grupoId     String?  @map("grupo_id")
+  regionalId  String   @map("regional_id")
+  contractId  String?  @map("contract_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  regional Regional                  @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+  contract Contract?                 @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  grupo    StockGrupo?               @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+  locais   StockLocalArmazenamento[]
+  entradas StockEntrada[]
+  saidas   StockSaida[]
+
+  @@index([regionalId, contractId])
+  @@map("stock_centros_distribuicao")
+}
+
+model StockLocalArmazenamento {
+  id                   String   @id @default(uuid())
+  nome                 String
+  observacoes          String?
+  padrao               Boolean  @default(false)
+  grupoId              String?  @map("grupo_id")
+  centroDistribuicaoId String   @map("centro_distribuicao_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  centroDistribuicao StockCentroDistribuicao @relation(fields: [centroDistribuicaoId], references: [id], onDelete: Cascade)
+  grupo              StockGrupo?             @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+  entradas           StockEntrada[]
+  saidas             StockSaida[]
+
+  @@index([centroDistribuicaoId])
+  @@map("stock_locais_armazenamento")
+}
+
+model StockProduto {
+  id                   String   @id @default(uuid())
+  codigo               String   @unique
+  nome                 String
+  grupoId              String   @map("grupo_id")
+  estoqueMinimo        Int      @default(0) @map("estoque_minimo")
+  custoUnitarioInicial Decimal? @map("custo_unitario_inicial") @db.Decimal(10, 2)
+  unidadeMedida        String   @map("unidade_medida")
+  fotoUrl              String?  @map("foto_url")
+  bridgeProductId      String?  @map("bridge_product_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  grupo         StockGrupo     @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  bridgeProduct Product?       @relation(fields: [bridgeProductId], references: [id], onDelete: SetNull)
+  entradas      StockEntrada[]
+  saidas        StockSaida[]
+
+  @@map("stock_produtos")
+}
+
+model StockEntrada {
+  id                      String   @id @default(uuid())
+  data                    DateTime @default(now())
+  produtoId               String   @map("produto_id")
+  quantidade              Int
+  custoUnitario           Decimal  @map("custo_unitario") @db.Decimal(10, 2)
+  total                   Decimal  @map("total") @db.Decimal(10, 2)
+  notaFiscal              String?  @map("nota_fiscal")
+  diasEntrega             Int?     @map("dias_entrega")
+  localArmazenamentoId    String?  @map("local_armazenamento_id")
+  centroDistribuicaoId    String?  @map("centro_distribuicao_id")
+  fornecedorId            String?  @map("fornecedor_id")
+  registradoPorUserId     String?  @map("registrado_por_user_id")
+  origemSistema           String?  @map("origem_sistema")
+  origemBridgeOrderId     String?  @map("origem_bridge_order_id")
+  origemBridgeOrderItemId String?  @map("origem_bridge_order_item_id")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  produto            StockProduto             @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  localArmazenamento StockLocalArmazenamento? @relation(fields: [localArmazenamentoId], references: [id], onDelete: SetNull)
+  centroDistribuicao StockCentroDistribuicao? @relation(fields: [centroDistribuicaoId], references: [id], onDelete: SetNull)
+  fornecedor         RegisteredSupplier?      @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  registradoPor      User?                    @relation("StockEntradaRegistradoPor", fields: [registradoPorUserId], references: [id], onDelete: SetNull)
+  origemOrder        Order?                   @relation(fields: [origemBridgeOrderId], references: [id], onDelete: SetNull)
+
+  @@map("stock_entradas")
+}
+
+model StockSaida {
+  id                   String   @id @default(uuid())
+  data                 DateTime @default(now())
+  produtoId            String   @map("produto_id")
+  quantidade           Int
+  custoUnitario        Decimal  @map("custo_unitario") @db.Decimal(10, 2)
+  total                Decimal  @map("total") @db.Decimal(10, 2)
+  notaFiscal           String?  @map("nota_fiscal")
+  localArmazenamentoId String?  @map("local_armazenamento_id")
+  centroDistribuicaoId String?  @map("centro_distribuicao_id")
+  retiradoPorId        String?  @map("retirado_por_id")
+  registradoPorUserId  String?  @map("registrado_por_user_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  produto            StockProduto             @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  localArmazenamento StockLocalArmazenamento? @relation(fields: [localArmazenamentoId], references: [id], onDelete: SetNull)
+  centroDistribuicao StockCentroDistribuicao? @relation(fields: [centroDistribuicaoId], references: [id], onDelete: SetNull)
+  retiradoPor        User?                    @relation("StockSaidaRetiradoPor", fields: [retiradoPorId], references: [id], onDelete: SetNull)
+  registradoPor      User?                    @relation("StockSaidaRegistradoPor", fields: [registradoPorUserId], references: [id], onDelete: SetNull)
+
+  @@map("stock_saidas")
+}
+
+model StockPatrimonioItem {
+  id                 String    @id @default(uuid())
+  grupoId            String    @map("grupo_id")
+  patrimonio         String    @unique
+  tipoItem           String    @map("tipo_item")
+  serial             String?
+  descricao          String?
+  marca              String?
+  modelo             String?
+  valorOriginal      Decimal?  @map("valor_original") @db.Decimal(10, 2)
+  fotoUrl            String?   @map("foto_url")
+  dataAquisicao      DateTime? @map("data_aquisicao")
+  sistemaOperacional String?   @map("sistema_operacional")
+  responsavelUserId  String?   @map("responsavel_user_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  grupo           StockGrupo            @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  responsavelUser User?                 @relation("StockPatrimonioResponsavel", fields: [responsavelUserId], references: [id], onDelete: SetNull)
+  fluxos          StockPatrimonioFluxo[]
+
+  @@map("stock_patrimonio_itens")
+}
+
+model StockPatrimonioFluxo {
+  id               String    @id @default(uuid())
+  inventarioItemId String    @map("inventario_item_id")
+  tipoFluxo        String    @map("tipo_fluxo")
+  statusFluxo      String    @default("ativo") @map("status_fluxo")
+  etapaAtual       String?   @map("etapa_atual")
+  motivoInicial    String?   @map("motivo_inicial")
+  observacoes      String?
+  iniciadoEm       DateTime  @default(now()) @map("iniciado_em")
+  encerradoEm      DateTime? @map("encerrado_em")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  item    StockPatrimonioItem          @relation(fields: [inventarioItemId], references: [id], onDelete: Cascade)
+  eventos StockPatrimonioFluxoEvento[]
+
+  @@map("stock_inventario_fluxos")
+}
+
+model StockPatrimonioFluxoEvento {
+  id           String   @id @default(uuid())
+  fluxoId      String   @map("fluxo_id")
+  ordem        Int
+  etapaCodigo  String   @map("etapa_codigo")
+  etapaNome    String   @map("etapa_nome")
+  statusEvento String   @default("concluido") @map("status_evento")
+  ocorridoEm   DateTime @default(now()) @map("ocorrido_em")
+  referencia   String?
+  observacao   String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  fluxo StockPatrimonioFluxo @relation(fields: [fluxoId], references: [id], onDelete: Cascade)
+
+  @@map("stock_inventario_fluxo_eventos")
+}

@@ -1,0 +1,126 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. CENTRAL DE CHAMADOS DE SERVIÇOS (SERVICE TICKETS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TicketType {
+  id        String   @id @default(uuid())
+  name      String
+  slaHours  Int      @default(48) @map("sla_hours")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tickets ServiceTicket[]
+
+  @@map("ticket_types")
+}
+
+model TicketFlow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tickets ServiceTicket[]
+
+  @@map("ticket_flows")
+}
+
+model ServiceTicket {
+  id                   String         @id @default(uuid())
+  title                String
+  description          String
+  contractId           String         @map("contract_id")
+  regionalId           String         @map("regional_id")
+  typeId               String?        @map("type_id")
+  flowId               String?        @map("flow_id")
+  supplierId           String?        @map("supplier_id")
+  supplierNameSnapshot String?        @map("supplier_name_snapshot")
+  createdById          String         @map("created_by")
+  assignedToId         String?        @map("assigned_to")
+  status               TicketStatus   @default(aberto)
+  priority             TicketPriority @default(media)
+  slaHours             Int            @default(48) @map("sla_hours")
+  finalCost            Decimal?       @map("final_cost") @db.Decimal(10, 2)
+  autoSyncCost         Boolean        @default(false) @map("auto_sync_cost")
+  resolvedAt           DateTime?      @map("resolved_at")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  contract    Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  regional    Regional            @relation(fields: [regionalId], references: [id], onDelete: Restrict)
+  type        TicketType?         @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  flow        TicketFlow?         @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  supplier    RegisteredSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy   User                @relation("TicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo  User?               @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages    TicketMessage[]
+  steps       TicketStep[]
+  attachments TicketAttachment[]
+  products    TicketProduct[]
+
+  @@index([regionalId, contractId, status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@map("service_tickets")
+}
+
+model TicketStep {
+  id          String    @id @default(uuid())
+  ticketId    String    @map("ticket_id")
+  title       String
+  completed   Boolean   @default(false)
+  order       Int       @default(0)
+  completedAt DateTime? @map("completed_at")
+  completedBy String?   @map("completed_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_steps")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  userId     String   @map("user_id")
+  message    String
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("ticket_messages")
+}
+
+model TicketAttachment {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  fileName   String   @map("file_name")
+  fileUrl    String   @map("file_url")
+  fileType   String?  @map("file_type")
+  fileSize   Int?     @map("file_size")
+  uploadedBy String?  @map("uploaded_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_attachments")
+}
+
+model TicketProduct {
+  id                  String   @id @default(uuid())
+  ticketId            String   @map("ticket_id")
+  productId           String?  @map("product_id")
+  productNameSnapshot String?  @map("product_name_snapshot")
+  quantity            Int      @default(1)
+  unitPrice           Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  ticket  ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  product Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("ticket_products")
+}

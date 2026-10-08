@@ -1,0 +1,73 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. NOTIFICAÇÕES & GOVERNANÇA DO SISTEMA
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AppNotification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  ticketId  String?  @map("ticket_id")
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("app_notifications")
+}
+
+model SystemModule {
+  id        String   @id
+  name      String
+  category  String
+  enabled   Boolean  @default(true)
+  roles     String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_modules_config")
+}
+
+model AppConfig {
+  id                   String   @id @default("default")
+  minimumClientVersion String   @default("1.0.0") @map("minimum_client_version")
+  maintenanceMode      Boolean  @default(false) @map("maintenance_mode")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("app_config")
+}
+
+model UserPresence {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  city       String?
+  region     String?
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_presence")
+}
+
+model TeamMember {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  name       String
+  role       String
+  email      String?
+  phone      String?
+  avatarUrl  String?  @map("avatar_url")
+  regionalId String?  @map("regional_id")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  regional Regional? @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("team_members")
+}

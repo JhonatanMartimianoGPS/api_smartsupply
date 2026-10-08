@@ -1,54 +1,81 @@
-// ===========================================================================
-// Table public.users
-// Replaces the Supabase auth.users table: every user_id / created_by / ...
-// column in the other tables points to it.
-// ===========================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. USUÁRIOS & REGIONAIS
+// ─────────────────────────────────────────────────────────────────────────────
 
-model Users {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String   @unique
-  password_hash String
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         AppRole   @default(colaborador)
+  department   String?
+  cargo        String?
+  phone        String?
+  avatarUrl    String?   @map("avatar_url")
+  taxId        String?   @map("tax_id")
+  externalKey  String?   @map("external_key")
+  externalIntegrationEnabled Boolean @default(false) @map("external_integration_enabled")
+  isActive     Boolean   @default(true) @map("is_active")
+  isBlocked    Boolean   @default(false) @map("is_blocked")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  app_notifications                         AppNotifications[]
-  commercial_prospects                      CommercialProspects[]
-  commercial_contacts                       CommercialContacts[]
-  commercial_interactions                   CommercialInteractions[]
-  commercial_simulations                    CommercialSimulations[]
-  feed_posts                                FeedPosts[]
-  feed_post_comments                        FeedPostComments[]
-  feed_comment_likes                        FeedCommentLikes[]
-  product_history                           ProductHistory[]
-  system_ai_settings                        SystemAiSettings[]
-  system_modules_config                     SystemModulesConfig[]
-  team_members_by_created_by                TeamMembers[]                   @relation("team_members_created_by_fkey")
-  team_members_by_user_id                   TeamMembers[]                   @relation("team_members_user_id_fkey")
-  user_regionals                            UserRegionals[]
-  user_roles                                UserRoles[]
-  feed_post_likes                           FeedPostLikes[]
-  stock_profiles                            StockProfiles?
-  stock_user_roles                          StockUserRoles[]
-  rooms_profiles                            RoomsProfiles?
-  rooms_user_roles                          RoomsUserRoles[]
-  assistant_contracts                       AssistantContracts[]
-  order_issue_reports_by_resolved_by        OrderIssueReports[]             @relation("order_issue_reports_resolved_by_fkey")
-  order_issue_reports_by_user_id            OrderIssueReports[]             @relation("order_issue_reports_user_id_fkey")
-  orders                                    Orders[]
-  order_delivery_divergences_by_reported_by OrderDeliveryDivergences[]      @relation("order_delivery_divergences_reported_by_fkey")
-  order_delivery_divergences_by_resolved_by OrderDeliveryDivergences[]      @relation("order_delivery_divergences_resolved_by_fkey")
-  service_tickets                           ServiceTickets[]
-  service_ticket_attachments                ServiceTicketAttachments[]
-  service_ticket_messages                   ServiceTicketMessages[]
-  service_ticket_steps                      ServiceTicketSteps[]
-  solicitations                             Solicitations[]
-  profiles_by_blocked_by                    Profiles[]                      @relation("profiles_blocked_by_fkey")
-  profiles_by_user_id                       Profiles?                       @relation("profiles_user_id_fkey")
-  stock_bridge_order_stock_receipts         StockBridgeOrderStockReceipts[]
-  stock_user_grupos                         StockUserGrupos[]
-  rooms_access_requests                     RoomsAccessRequests[]
-  service_ticket_products                   ServiceTicketProducts[]
+  // Relacionamentos
+  regionals      UserRegional[]
+  contracts      UserContract[]
+  teamMembers    TeamMember[]
+  createdOrders  Order[]              @relation("OrderCreatedBy")
+  ticketsCreated ServiceTicket[]      @relation("TicketCreatedBy")
+  ticketsAssigned ServiceTicket[]     @relation("TicketAssignedTo")
+  ticketMessages TicketMessage[]
+  feedPosts      FeedPost[]
+  feedComments   FeedComment[]
+  feedLikes      FeedLike[]
+  notifications  AppNotification[]
+  presences      UserPresence[]
+  solicitations  Solicitation[]       @relation("SolicitationCreatedBy")
+  solicitationHistory SolicitationHistory[]
+  stockEntradasRegistradas StockEntrada[] @relation("StockEntradaRegistradoPor")
+  stockSaidasRegistradas StockSaida[] @relation("StockSaidaRegistradoPor")
+  stockSaidasRetiradas StockSaida[] @relation("StockSaidaRetiradoPor")
+  stockPatrimoniosResponsavel StockPatrimonioItem[] @relation("StockPatrimonioResponsavel")
+  auditLogs      AuditLog[]
 
   @@map("users")
-  @@schema("public")
+}
+
+model Regional {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  externalKey String?  @map("external_key")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users              UserRegional[]
+  contracts          Contract[]
+  contractCategories ContractCategory[]
+  products           Product[]
+  tickets            ServiceTicket[]
+  suppliers          SupplierRegional[]
+  teamMembers        TeamMember[]
+  stockGrupos        StockGrupo[]
+  stockCentros       StockCentroDistribuicao[]
+
+  @@map("regionals")
+}
+
+model UserRegional {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  regionalId String   @map("regional_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  regional Regional @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, regionalId])
+  @@map("user_regionals")
 }

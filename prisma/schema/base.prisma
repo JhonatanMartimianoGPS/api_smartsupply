@@ -1,12 +1,45 @@
 generator client {
-  provider        = "prisma-client"
-  output          = "../../src/generated/prisma"
-  moduleFormat    = "esm"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  schemas    = ["public", "stock", "rooms"]
-  extensions = [pg_trgm]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS GLOBAIS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AppRole {
+  super_admin
+  admin
+  gestor
+  suprimentos
+  assistente
+  colaborador
+}
+
+enum OrderStatus {
+  pendente
+  aprovado
+  rejeitado
+  entregue
+  cancelado
+}
+
+enum TicketStatus {
+  aberto
+  em_atendimento
+  fluxo_definido
+  aguardando_terceiro
+  concluido
+  cancelado
+}
+
+enum TicketPriority {
+  baixa
+  media
+  alta
+  critica
 }
