@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import { accessService, type AccessUser } from "./access.service.js";
+import type { ContractInput } from "../schemas/contract.schema.js";
 import { orderService } from "./order.service.js";
 
 /** Mês atual no fuso de São Paulo, como "YYYY-MM" (o mesmo fuso e período que o frontend usa). */
@@ -24,17 +25,37 @@ function parsePeriodMonth(value: unknown) {
 /** O frontend compara o mês como data ("2026-10-01"), então a resposta usa esse formato. */
 const toPeriodDate = (periodMonth: string) => `${periodMonth}-01`;
 
+// Transitório: as telas leem os nomes do Supabase (regional_id, total_budget, allow_custom_prices...)
+function formatContract(c: any) {
+  return {
+    ...c,
+    regional_id: c.regionalId,
+    regional_name: c.regional?.name ?? null,
+    category_id: c.categoryId,
+    total_budget: Number(c.totalBudget),
+    used_budget: Number(c.usedBudget),
+    unlimited_budget: c.unlimitedBudget,
+    allow_extra_order: c.allowExtraOrder,
+    allow_custom_prices: c.allowCustomPrices,
+    allow_unlimited_items_solicitation: c.allowUnlimitedItemsSolicitation,
+    max_items_per_solicitation: c.maxItemsPerSolicitation,
+    budget_locked: c.budgetLocked,
+    created_at: c.createdAt?.toISOString?.() ?? c.createdAt,
+    updated_at: c.updatedAt?.toISOString?.() ?? c.updatedAt,
+  };
+}
+
 export class ContractService {
   /**
-   * Lista contratos operacionais
+   * Lista os contratos que o usuário pode ver (no Supabase era a RLS de contracts)
    */
-  async listContracts(params?: { regionalId?: string; active?: boolean }) {
-    const where: any = {};
-    if (params?.active !== undefined) where.active = params.active;
-    if (params?.regionalId) where.regionalId = params.regionalId;
+  async listContracts(user: AccessUser, params?: { regionalId?: string; active?: boolean }) {
+    const and: any[] = [accessService.contractFilter(user)];
+    if (params?.active !== undefined) and.push({ active: params.active });
+    if (params?.regionalId) and.push({ regionalId: params.regionalId });
 
     const contracts = await prisma.contract.findMany({
-      where,
+      where: { AND: and },
       include: {
         regional: true,
         category: true,
@@ -42,16 +63,15 @@ export class ContractService {
       orderBy: { name: "asc" },
     });
 
-    return contracts.map((c) => ({
-      ...c,
-      regional_id: c.regionalId,
-      category_id: c.categoryId,
-      total_budget: Number(c.totalBudget),
-      used_budget: Number(c.usedBudget),
-      unlimited_budget: c.unlimitedBudget,
-      allow_extra_order: c.allowExtraOrder,
-      budget_locked: c.budgetLocked,
-    }));
+    return contracts.map(formatContract);
+  }
+
+  /** Categoria de contrato informada precisa existir (senão o banco recusaria com erro de chave estrangeira) */
+  private async assertCategoryExists(categoryId: string) {
+    const count = await prisma.contractCategory.count({ where: { id: categoryId } });
+    if (count === 0) {
+      throw new AppError(400, "Categoria de contrato não encontrada.");
+    }
   }
 
   /**
@@ -97,6 +117,9 @@ export class ContractService {
       used_budget: Number(contract.usedBudget),
       unlimited_budget: contract.unlimitedBudget,
       allow_extra_order: contract.allowExtraOrder,
+      allow_custom_prices: contract.allowCustomPrices,
+      allow_unlimited_items_solicitation: contract.allowUnlimitedItemsSolicitation,
+      max_items_per_solicitation: contract.maxItemsPerSolicitation,
       budget_locked: contract.budgetLocked,
       monthly_total_budget: currentPeriod ? Number(currentPeriod.monthlyBudget) : Number(contract.totalBudget),
       monthly_used_budget: currentPeriod ? Number(currentPeriod.usedBudget) : 0,
@@ -130,27 +153,26 @@ export class ContractService {
   /**
    * Criação de novo contrato
    */
-  async createContract(data: {
-    name: string;
-    code?: string;
-    regionalId: string;
-    categoryId?: string;
-    totalBudget?: number;
-    unlimitedBudget?: boolean;
-    allowExtraOrder?: boolean;
-    allowCustomPrices?: boolean;
-    budgetLocked?: boolean;
-  }) {
+  async createContract(user: AccessUser, data: ContractInput) {
+    if (!data.name || !data.regionalId) {
+      throw new AppError(400, "Nome e regional do contrato são obrigatórios.");
+    }
+    // Admin só cria contrato nas regionais em que atua
+    await accessService.assertRegionalAccess(user, data.regionalId);
+    if (data.categoryId) await this.assertCategoryExists(data.categoryId);
+
     const contract = await prisma.contract.create({
       data: {
         name: data.name,
-        code: data.code,
+        code: data.code ?? undefined,
         regionalId: data.regionalId,
-        categoryId: data.categoryId,
+        categoryId: data.categoryId ?? undefined,
         totalBudget: data.totalBudget ?? 0,
         unlimitedBudget: data.unlimitedBudget ?? false,
         allowExtraOrder: data.allowExtraOrder ?? true,
         allowCustomPrices: data.allowCustomPrices ?? false,
+        allowUnlimitedItemsSolicitation: data.allowUnlimitedItemsSolicitation ?? false,
+        maxItemsPerSolicitation: data.maxItemsPerSolicitation ?? undefined,
         budgetLocked: data.budgetLocked ?? false,
       },
       include: {
@@ -159,37 +181,18 @@ export class ContractService {
       },
     });
 
-    return {
-      ...contract,
-      regional_id: contract.regionalId,
-      category_id: contract.categoryId,
-      total_budget: Number(contract.totalBudget),
-      used_budget: Number(contract.usedBudget),
-    };
+    return formatContract(contract);
   }
 
   /**
-   * Atualização de contrato
+   * Atualização de contrato (dentro do escopo do usuário)
    */
-  async updateContract(
-    id: string,
-    data: {
-      name?: string;
-      code?: string;
-      regionalId?: string;
-      categoryId?: string;
-      totalBudget?: number;
-      unlimitedBudget?: boolean;
-      allowExtraOrder?: boolean;
-      allowCustomPrices?: boolean;
-      budgetLocked?: boolean;
-      active?: boolean;
-    },
-  ) {
-    const existing = await prisma.contract.findUnique({ where: { id } });
-    if (!existing) {
-      throw new AppError(404, "Contrato não encontrado.");
+  async updateContract(user: AccessUser, id: string, data: ContractInput) {
+    const existing = await accessService.assertContractAccess(user, id);
+    if (data.regionalId && data.regionalId !== existing.regionalId) {
+      await accessService.assertRegionalAccess(user, data.regionalId);
     }
+    if (data.categoryId) await this.assertCategoryExists(data.categoryId);
 
     const updated = await prisma.contract.update({
       where: { id },
@@ -198,10 +201,12 @@ export class ContractService {
         code: data.code,
         regionalId: data.regionalId,
         categoryId: data.categoryId,
-        totalBudget: data.totalBudget !== undefined ? data.totalBudget : undefined,
+        totalBudget: data.totalBudget,
         unlimitedBudget: data.unlimitedBudget,
         allowExtraOrder: data.allowExtraOrder,
         allowCustomPrices: data.allowCustomPrices,
+        allowUnlimitedItemsSolicitation: data.allowUnlimitedItemsSolicitation,
+        maxItemsPerSolicitation: data.maxItemsPerSolicitation,
         budgetLocked: data.budgetLocked,
         active: data.active,
       },
@@ -211,29 +216,17 @@ export class ContractService {
       },
     });
 
-    return {
-      ...updated,
-      regional_id: updated.regionalId,
-      category_id: updated.categoryId,
-      total_budget: Number(updated.totalBudget),
-      used_budget: Number(updated.usedBudget),
-    };
+    return formatContract(updated);
   }
 
   /**
-   * Exclusão / Desativação de contrato
+   * Exclusão / Desativação de contrato (com pedidos, só desativa)
    */
-  async deleteContract(id: string) {
-    const contract = await prisma.contract.findUnique({
-      where: { id },
-      include: { orders: true },
-    });
+  async deleteContract(user: AccessUser, id: string) {
+    await accessService.assertContractAccess(user, id);
+    const ordersCount = await prisma.order.count({ where: { contractId: id } });
 
-    if (!contract) {
-      throw new AppError(404, "Contrato não encontrado.");
-    }
-
-    if (contract.orders.length > 0) {
+    if (ordersCount > 0) {
       await prisma.contract.update({
         where: { id },
         data: { active: false },

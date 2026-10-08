@@ -1,13 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
 import { contractService } from "../services/contract.service.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import { toContractInput } from "../schemas/contract.schema.js";
 
 export class ContractController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const active = req.query.active !== undefined ? req.query.active === "true" : undefined;
-      const regionalId = req.query.regionalId as string | undefined;
-      const contracts = await contractService.listContracts({ active, regionalId });
+      const regionalId = typeof req.query.regionalId === "string" && req.query.regionalId ? req.query.regionalId : undefined;
+      const contracts = await contractService.listContracts(req.user!, { active, regionalId });
       res.json(contracts);
     } catch (error) {
       next(error);
@@ -25,7 +26,7 @@ export class ContractController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const contract = await contractService.createContract(req.body);
+      const contract = await contractService.createContract(req.user!, toContractInput(req.body));
       res.status(201).json(contract);
     } catch (error) {
       next(error);
@@ -34,7 +35,7 @@ export class ContractController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const contract = await contractService.updateContract(req.params.id as string, req.body);
+      const contract = await contractService.updateContract(req.user!, req.params.id as string, toContractInput(req.body));
       res.json(contract);
     } catch (error) {
       next(error);
@@ -43,7 +44,7 @@ export class ContractController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await contractService.deleteContract(req.params.id as string);
+      const result = await contractService.deleteContract(req.user!, req.params.id as string);
       res.json(result);
     } catch (error) {
       next(error);

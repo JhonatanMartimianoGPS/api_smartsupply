@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { contractController } from "../controllers/contract.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { createContractSchema, updateContractSchema } from "../schemas/contract.schema.js";
 
 const router = Router();
 
@@ -14,10 +16,10 @@ router.post("/budget-periods/batch", (req, res, next) =>
 
 // Detalhes, criação, atualização e exclusão
 router.get("/:id", (req, res, next) => contractController.getById(req, res, next));
-router.post("/", authorize(["super_admin", "admin"]), (req, res, next) =>
+router.post("/", authorize(["super_admin", "admin"]), validate(createContractSchema), (req, res, next) =>
   contractController.create(req, res, next),
 );
-router.patch("/:id", authorize(["super_admin", "admin"]), (req, res, next) =>
+router.patch("/:id", authorize(["super_admin", "admin"]), validate(updateContractSchema), (req, res, next) =>
   contractController.update(req, res, next),
 );
 router.delete("/:id", authorize(["super_admin"]), (req, res, next) =>

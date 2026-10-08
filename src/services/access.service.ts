@@ -47,6 +47,23 @@ export class AccessService {
   }
 
   /**
+   * Valida que o usuário atua na regional (super_admin: qualquer regional existente). Usado ao criar
+   * ou mover um contrato. Responde 404 para não revelar regionais de outros.
+   */
+  async assertRegionalAccess(user: AccessUser, regionalId: string) {
+    if (typeof regionalId !== "string" || !regionalId) {
+      throw new AppError(400, "Regional é obrigatória.");
+    }
+    const regional = await prisma.regional.findFirst({
+      where: user.role === "super_admin" ? { id: regionalId } : { id: regionalId, users: { some: { userId: user.userId } } },
+    });
+    if (!regional) {
+      throw new AppError(404, "Regional não encontrada.");
+    }
+    return regional;
+  }
+
+  /**
    * Valida o acesso a um contrato específico e devolve o contrato. Responde 404 (e não 403)
    * para não revelar que o registro existe.
    */
