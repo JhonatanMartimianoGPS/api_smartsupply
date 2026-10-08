@@ -6,6 +6,8 @@ model AppNotification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   ticketId  String?  @map("ticket_id")
+  // Tipo do aviso (new_order, order_status_change, new_ticket...): o frontend escolhe o ícone por ele
+  type      String   @default("info")
   title     String
   message   String
   link      String?
@@ -14,6 +16,7 @@ model AppNotification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
   @@map("app_notifications")
 }
 
