@@ -47,22 +47,23 @@ export class AccessService {
   }
 
   /**
-   * Valida o acesso a um contrato específico. Responde 404 (e não 403) para
-   * não revelar que o registro existe.
+   * Valida o acesso a um contrato específico e devolve o contrato. Responde 404 (e não 403)
+   * para não revelar que o registro existe.
    */
   async assertContractAccess(user: AccessUser, contractId: string, notFoundMessage = "Contrato não encontrado.") {
     if (typeof contractId !== "string" || !contractId) {
       throw new AppError(400, "Contrato é obrigatório.");
     }
 
-    const allowed = await prisma.contract.findFirst({
+    const contract = await prisma.contract.findFirst({
       where: { AND: [{ id: contractId }, this.contractFilter(user)] },
-      select: { id: true },
     });
 
-    if (!allowed) {
+    if (!contract) {
       throw new AppError(404, notFoundMessage);
     }
+
+    return contract;
   }
 }
 

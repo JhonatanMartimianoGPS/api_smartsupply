@@ -1,10 +1,113 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
-import type { OrderStatus, Prisma } from "@prisma/client";
+import type { Contract, OrderStatus, Prisma } from "@prisma/client";
 import { auditService } from "./audit.service.js";
 import { accessService, type AccessUser } from "./access.service.js";
 
 export class OrderService {
+  /**
+   * Valida e prepara os itens de um pedido (regras da antiga função create_order_with_items):
+   * - linhas repetidas do mesmo produto são somadas
+   * - o produto precisa existir, estar ativo e ser da regional do contrato (ou ser global, sem regional)
+   * - o preço vem do produto; o preço enviado pelo cliente só vale se o contrato permitir preços personalizados
+   */
+  private async prepareItems(
+    contract: { regionalId: string; allowCustomPrices: boolean },
+    items: Array<{ productId?: string; product_id?: string; quantity: number; unitPrice?: number; unit_price?: number }>,
+  ) {
+    const wanted = new Map<string, { quantity: number; customPrice?: number }>();
+    for (const it of items) {
+      const productId = it?.productId || it?.product_id;
+      if (typeof productId !== "string" || !Number.isInteger(it.quantity) || it.quantity <= 0) {
+        throw new AppError(400, "Os itens informados são inválidos.");
+      }
+      const sent = it.unitPrice ?? it.unit_price;
+      if (sent !== undefined && sent !== null && (typeof sent !== "number" || !Number.isFinite(sent) || sent < 0)) {
+        throw new AppError(400, "Os itens informados são inválidos.");
+      }
+      const current = wanted.get(productId);
+      wanted.set(productId, {
+        quantity: (current?.quantity ?? 0) + it.quantity,
+        customPrice: sent == null ? current?.customPrice : Math.max(current?.customPrice ?? 0, sent),
+      });
+    }
+    if (wanted.size === 0) {
+      throw new AppError(400, "O pedido precisa conter ao menos um item.");
+    }
+
+    const products = await prisma.product.findMany({
+      where: {
+        id: { in: [...wanted.keys()] },
+        active: true,
+        OR: [{ regionalId: contract.regionalId }, { regionalId: null }],
+      },
+      include: { category: true, supplier: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const unavailable = [...wanted.keys()].filter((id) => !productById.has(id));
+    if (unavailable.length > 0) {
+      const shown = unavailable.slice(0, 5).join("; ");
+      const more = unavailable.length > 5 ? ` e mais ${unavailable.length - 5} item(ns)` : "";
+      throw new AppError(400, `Produtos indisponíveis para este contrato: ${shown}${more}. Ajuste os itens antes de enviar o pedido.`);
+    }
+
+    let totalAmount = 0;
+    const itemsToCreate: Prisma.OrderItemCreateManyOrderInput[] = [];
+    for (const [productId, wantedItem] of wanted) {
+      const prod = productById.get(productId)!;
+      const unitPrice =
+        contract.allowCustomPrices && wantedItem.customPrice !== undefined ? wantedItem.customPrice : Number(prod.tabela);
+
+      totalAmount += unitPrice * wantedItem.quantity;
+      itemsToCreate.push({
+        productId,
+        quantity: wantedItem.quantity,
+        unitPrice,
+        productNameSnapshot: prod.name,
+        productCodigoSnapshot: prod.codigo,
+        productUnidadeSnapshot: prod.unidade,
+        productCategoriaSnapshot: prod.category?.name,
+        productFornecedorSnapshot: prod.supplier?.tradeName || prod.supplier?.name,
+        productTabelaSnapshot: prod.tabela,
+        productImageUrlSnapshot: prod.imageUrl,
+      });
+    }
+
+    return { itemsToCreate, totalAmount: Math.round(totalAmount * 100) / 100 };
+  }
+
+  /**
+   * Contrato com orçamento bloqueado não pode passar do saldo do mês (consumo + valor do pedido
+   * acima do limite). Contratos de orçamento ilimitado não são verificados, inclusive na edição
+   * de itens (no Supabase a edição ignorava esse flag; aqui é de propósito).
+   *
+   * Premissa: o consumo só é debitado na aprovação (updateStatus), então esta checagem é um
+   * aviso antecipado. Dois pedidos simultâneos podem passar por ela, como já acontecia no Supabase.
+   */
+  private async assertBudgetAllows(
+    contract: Pick<Contract, "id" | "unlimitedBudget" | "budgetLocked" | "totalBudget">,
+    ano: number,
+    mes: number,
+    orderTotal: number,
+    message: string,
+  ) {
+    if (contract.unlimitedBudget) return;
+
+    const period = await prisma.contractBudgetPeriod.findUnique({
+      where: { contractId_periodMonth: { contractId: contract.id, periodMonth: `${ano}-${String(mes).padStart(2, "0")}` } },
+    });
+
+    // Sem período do mês, nada foi consumido ainda (contract.usedBudget acumula todos os meses)
+    const locked = period?.budgetLocked ?? contract.budgetLocked;
+    const used = period ? Number(period.usedBudget) : 0;
+    const monthly = Number(period ? period.monthlyBudget : contract.totalBudget);
+
+    if (locked && used + orderTotal > monthly) {
+      throw new AppError(400, message);
+    }
+  }
+
   /**
    * Garante que o pedido existe e está no escopo do usuário (404 caso contrário).
    * O id pode vir do body, então precisa ser validado.
@@ -242,47 +345,17 @@ export class OrderService {
     const mes = data.mes || now.getMonth() + 1;
     const ano = data.ano || now.getFullYear();
 
-    await accessService.assertContractAccess(user, contractId);
+    const contract = await accessService.assertContractAccess(user, contractId);
     const userId = user.userId;
 
-    // Calcula os snapshots e totais dos itens
-    let totalAmount = 0;
-    const itemsToCreate = [];
-
-    for (const it of data.items) {
-      const pId = it.productId || it.product_id;
-      let unitPrice = it.unitPrice || it.unit_price || 0;
-      let productSnapshot: any = {};
-
-      if (pId) {
-        const prod = await prisma.product.findUnique({
-          where: { id: pId },
-          include: { category: true, supplier: true },
-        });
-        if (prod) {
-          if (!unitPrice) unitPrice = Number(prod.tabela);
-          productSnapshot = {
-            productNameSnapshot: prod.name,
-            productCodigoSnapshot: prod.codigo,
-            productUnidadeSnapshot: prod.unidade,
-            productCategoriaSnapshot: prod.category?.name,
-            productFornecedorSnapshot: prod.supplier?.tradeName || prod.supplier?.name,
-            productTabelaSnapshot: prod.tabela,
-            productImageUrlSnapshot: prod.imageUrl,
-          };
-        }
-      }
-
-      const itemTotal = unitPrice * it.quantity;
-      totalAmount += itemTotal;
-
-      itemsToCreate.push({
-        productId: pId,
-        quantity: it.quantity,
-        unitPrice,
-        ...productSnapshot,
-      });
-    }
+    const { itemsToCreate, totalAmount } = await this.prepareItems(contract, data.items);
+    await this.assertBudgetAllows(
+      contract,
+      ano,
+      mes,
+      totalAmount,
+      "Este contrato está com o orçamento bloqueado. Remova itens para ficar dentro do saldo disponível antes de enviar o pedido.",
+    );
 
     const order = await prisma.order.create({
       data: {
@@ -342,50 +415,24 @@ export class OrderService {
       throw new AppError(400, "Contrato é obrigatório.");
     }
 
-    await accessService.assertContractAccess(user, contractId);
+    const contract = await accessService.assertContractAccess(user, contractId);
+    if (!contract.allowExtraOrder) {
+      throw new AppError(400, "Este contrato não está habilitado para receber pedidos extras.");
+    }
     const userId = user.userId;
 
     const now = new Date();
     const mes = data.mes || now.getMonth() + 1;
     const ano = data.ano || now.getFullYear();
 
-    let totalAmount = 0;
-    const itemsToCreate = [];
-
-    for (const it of data.items) {
-      const pId = it.productId || it.product_id;
-      let unitPrice = it.unitPrice || it.unit_price || 0;
-      let productSnapshot: any = {};
-
-      if (pId) {
-        const prod = await prisma.product.findUnique({
-          where: { id: pId },
-          include: { category: true, supplier: true },
-        });
-        if (prod) {
-          if (!unitPrice) unitPrice = Number(prod.tabela);
-          productSnapshot = {
-            productNameSnapshot: prod.name,
-            productCodigoSnapshot: prod.codigo,
-            productUnidadeSnapshot: prod.unidade,
-            productCategoriaSnapshot: prod.category?.name,
-            productFornecedorSnapshot: prod.supplier?.tradeName || prod.supplier?.name,
-            productTabelaSnapshot: prod.tabela,
-            productImageUrlSnapshot: prod.imageUrl,
-          };
-        }
-      }
-
-      const itemTotal = unitPrice * it.quantity;
-      totalAmount += itemTotal;
-
-      itemsToCreate.push({
-        productId: pId,
-        quantity: it.quantity,
-        unitPrice,
-        ...productSnapshot,
-      });
-    }
+    const { itemsToCreate, totalAmount } = await this.prepareItems(contract, data.items);
+    await this.assertBudgetAllows(
+      contract,
+      ano,
+      mes,
+      totalAmount,
+      "Este contrato está com o orçamento bloqueado. O pedido extra excede o saldo disponível da competência.",
+    );
 
     const order = await prisma.order.create({
       data: {
@@ -510,6 +557,7 @@ export class OrderService {
             periodMonth,
             monthlyBudget: order.contract.totalBudget,
             usedBudget: order.totalAmount,
+            budgetLocked: order.contract.budgetLocked,
           },
           update: {
             usedBudget: { increment: order.totalAmount },
@@ -620,17 +668,14 @@ export class OrderService {
     if (!accessService.isSuprimentos(user)) {
       throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem editar os itens do pedido.");
     }
-    // Lista vazia apagaria todos os itens do pedido
+    // Lista vazia apagaria todos os itens do pedido (prepareItems valida o conteúdo de cada item)
     if (!Array.isArray(items) || items.length === 0) {
       throw new AppError(400, "O pedido precisa conter ao menos um item.");
-    }
-    if (items.some((it) => !it || typeof it.product_id !== "string" || !Number.isInteger(it.quantity) || it.quantity <= 0)) {
-      throw new AppError(400, "Os itens informados são inválidos.");
     }
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, contract: accessService.contractFilter(user) },
-      select: { id: true, status: true },
+      select: { id: true, status: true, ano: true, mes: true, contract: true },
     });
     if (!order) {
       throw new AppError(404, "Pedido não encontrado.");
@@ -639,32 +684,14 @@ export class OrderService {
       throw new AppError(400, "Apenas pedidos pendentes podem ter itens editados.");
     }
 
-    let newTotal = 0;
-    const itemsToCreate: Prisma.OrderItemCreateManyInput[] = [];
-
-    for (const it of items) {
-      const prod = await prisma.product.findUnique({
-        where: { id: it.product_id },
-        include: { category: true, supplier: true },
-      });
-
-      const unitPrice = it.unit_price;
-      newTotal += unitPrice * it.quantity;
-
-      itemsToCreate.push({
-        orderId,
-        productId: it.product_id,
-        quantity: it.quantity,
-        unitPrice,
-        productNameSnapshot: prod?.name,
-        productCodigoSnapshot: prod?.codigo,
-        productUnidadeSnapshot: prod?.unidade,
-        productCategoriaSnapshot: prod?.category?.name,
-        productFornecedorSnapshot: prod?.supplier?.tradeName || prod?.supplier?.name,
-        productTabelaSnapshot: prod?.tabela,
-        productImageUrlSnapshot: prod?.imageUrl,
-      });
-    }
+    const { itemsToCreate, totalAmount: newTotal } = await this.prepareItems(order.contract, items);
+    await this.assertBudgetAllows(
+      order.contract,
+      order.ano,
+      order.mes,
+      newTotal,
+      "Este contrato está com o orçamento bloqueado. Remova itens para ficar dentro do saldo disponível antes de salvar as alterações.",
+    );
 
     // Remove os itens antigos e recria: tudo junto, para não perder os itens se algo falhar.
     // O pedido só é atualizado se ainda estiver pendente (uma aprovação simultânea faria o
@@ -678,7 +705,7 @@ export class OrderService {
         throw new AppError(409, "O pedido deixou de estar pendente. Atualize a página e tente de novo.");
       }
       await tx.orderItem.deleteMany({ where: { orderId } });
-      await tx.orderItem.createMany({ data: itemsToCreate });
+      await tx.orderItem.createMany({ data: itemsToCreate.map((item) => ({ ...item, orderId })) });
     });
 
     return { orderId, newTotal };
