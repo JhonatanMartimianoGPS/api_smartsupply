@@ -132,7 +132,11 @@ export class OrderController {
   // ─── Divergências de Entrega ────────────────────────────────────────────────
   async listDivergences(req: Request, res: Response, next: NextFunction) {
     try {
-      const divergences = await orderService.listDeliveryDivergences(req.user!);
+      const competenceMonth = typeof req.query.competenceMonth === "string" ? req.query.competenceMonth : undefined;
+      // O front manda os contratos separados por vírgula
+      const contractIds =
+        typeof req.query.contractIds === "string" ? req.query.contractIds.split(",").filter(Boolean).slice(0, 200) : undefined;
+      const divergences = await orderService.listDeliveryDivergences(req.user!, { competenceMonth, contractIds });
       res.json(divergences);
     } catch (error) {
       next(error);
@@ -150,7 +154,12 @@ export class OrderController {
 
   async resolveDivergence(req: Request, res: Response, next: NextFunction) {
     try {
-      const divergence = await orderService.resolveDeliveryDivergence(req.user!, req.params.id as string, req.body.notes);
+      // O front envia resolutionNote (formato do Supabase); notes é o nome no banco
+      const divergence = await orderService.resolveDeliveryDivergence(
+        req.user!,
+        req.params.id as string,
+        req.body?.resolutionNote ?? req.body?.notes,
+      );
       res.json(divergence);
     } catch (error) {
       next(error);

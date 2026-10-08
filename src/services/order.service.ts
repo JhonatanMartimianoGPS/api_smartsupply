@@ -409,12 +409,16 @@ export class OrderService {
         contract: {
           include: { regional: true, category: true },
         },
-        items: true,
+        createdBy: { select: { name: true } },
+        _count: { select: { items: true } },
       },
     });
 
+    // Transitório: a tela inicial lê o formato do Supabase (order_id, total, competence_month...)
     return orders.map((o) => ({
       id: o.id,
+      order_id: o.id,
+      user_id: o.createdById,
       contract_id: o.contractId,
       contractId: o.contractId,
       contract_name: o.contract.name,
@@ -423,13 +427,20 @@ export class OrderService {
       regionalName: o.contract.regional.name,
       category_name: o.contract.category?.name || "Geral",
       categoryName: o.contract.category?.name || "Geral",
+      contract_category_name: o.contract.category?.name ?? null,
+      contract_category_color: o.contract.category?.color ?? null,
+      created_by_name: o.createdBy?.name ?? null,
       status: o.status,
       total_amount: Number(o.totalAmount),
       totalAmount: Number(o.totalAmount),
-      items_count: o.items.length,
-      itemsCount: o.items.length,
+      total: Number(o.totalAmount),
+      items_count: o._count.items,
+      itemsCount: o._count.items,
       is_extra_order: o.isExtraOrder,
       isExtraOrder: o.isExtraOrder,
+      competence_month: `${o.ano}-${String(o.mes).padStart(2, "0")}-01`,
+      created_at: o.createdAt.toISOString(),
+      updated_at: o.updatedAt.toISOString(),
     }));
   }
 
@@ -947,6 +958,7 @@ export class OrderService {
       where: { orderId },
       orderBy: { createdAt: "desc" },
     });
+    const names = await this.userNamesById(history.map((h) => h.userId));
 
     return history.map((h) => ({
       id: h.id,
@@ -954,11 +966,21 @@ export class OrderService {
       orderId: h.orderId,
       user_id: h.userId,
       userId: h.userId,
+      userName: h.userId ? names.get(h.userId) : undefined,
+      user_profile: h.userId ? { full_name: names.get(h.userId) ?? "Usuário" } : undefined,
       action: h.action,
       details: h.details,
       created_at: h.createdAt.toISOString(),
       createdAt: h.createdAt.toISOString(),
     }));
+  }
+
+  /** Nome dos usuários pelos ids, numa consulta só (para histórico e divergências). */
+  private async userNamesById(ids: (string | null | undefined)[]) {
+    const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+    if (unique.length === 0) return new Map<string, string>();
+    const users = await prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, name: true } });
+    return new Map(users.map((u) => [u.id, u.name]));
   }
 
   async addHistory(user: AccessUser, orderId: string, data: { action: string; details?: string | null }) {
@@ -1018,35 +1040,99 @@ export class OrderService {
   }
 
   // ─── Divergências de Entrega ────────────────────────────────────────────────
-  async listDeliveryDivergences(user: AccessUser, params?: { competenceMonth?: string }) {
-    return prisma.orderDeliveryDivergence.findMany({
-      where: { order: { contract: accessService.contractFilter(user) } },
-      include: {
-        order: { include: { contract: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+  private readonly divergenceInclude = {
+    order: { include: { contract: { include: { regional: true } } } },
+  };
+
+  // Transitório: a aba Acompanhamento lê o formato do Supabase (order_id, observacao, resolution_note,
+  // status open/resolved). Os itens divergentes (items_payload) vêm do fluxo de estoque, fora do modelo atual.
+  private formatDivergence(d: any, names: Map<string, string>) {
+    const order = d.order;
+    return {
+      ...d,
+      order_id: d.orderId,
+      contract_id: order?.contractId ?? null,
+      stock_grupo_id: null,
+      reported_by: d.reportedById,
+      reporter_profile: { full_name: names.get(d.reportedById) ?? null },
+      competence_month: order ? `${order.ano}-${String(order.mes).padStart(2, "0")}-01` : null,
+      status: d.status === "resolvida" ? "resolved" : "open",
+      items_payload: [],
+      divergent_items_count: 0,
+      observacao: d.description,
+      resolution_note: d.notes,
+      resolved_by: null,
+      resolved_at: d.resolvedAt ? d.resolvedAt.toISOString() : null,
+      created_at: d.createdAt.toISOString(),
+      updated_at: d.updatedAt.toISOString(),
+      contract: order?.contract
+        ? {
+            id: order.contract.id,
+            name: order.contract.name,
+            regional: order.contract.regional ? { id: order.contract.regional.id, name: order.contract.regional.name } : null,
+          }
+        : null,
+      order: order
+        ? { id: order.id, status: order.status, total: Number(order.totalAmount), created_at: order.createdAt.toISOString() }
+        : null,
+    };
   }
 
-  async createDeliveryDivergence(user: AccessUser, data: { orderId: string; description: string }) {
+  async listDeliveryDivergences(user: AccessUser, params?: { competenceMonth?: string; contractIds?: string[] }) {
+    const orderWhere: any[] = [{ contract: accessService.contractFilter(user) }];
+
+    // O front manda a competência como "YYYY-MM-01" (ou "YYYY-MM")
+    if (params?.competenceMonth) {
+      const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(params.competenceMonth);
+      const mes = match ? Number(match[2]) : 0;
+      if (!match || mes < 1 || mes > 12) {
+        throw new AppError(400, "Mês de competência inválido. Use o formato AAAA-MM.");
+      }
+      orderWhere.push({ ano: Number(match[1]), mes });
+    }
+    if (params?.contractIds && params.contractIds.length > 0) {
+      orderWhere.push({ contractId: { in: params.contractIds } });
+    }
+
+    const rows = await prisma.orderDeliveryDivergence.findMany({
+      where: { order: { AND: orderWhere } },
+      include: this.divergenceInclude,
+      orderBy: { createdAt: "desc" },
+    });
+    const names = await this.userNamesById(rows.map((r) => r.reportedById));
+    return rows.map((d) => this.formatDivergence(d, names));
+  }
+
+  async createDeliveryDivergence(
+    user: AccessUser,
+    data: { orderId: string; description?: string | null; observacao?: string | null; items?: unknown[] },
+  ) {
     await this.assertOrderAccess(user, data.orderId);
-    if (typeof data.description !== "string" || !data.description.trim()) {
+    // O front envia `observacao` (formato do Supabase); `description` é o nome no banco
+    const text = typeof data.description === "string" ? data.description : typeof data.observacao === "string" ? data.observacao : "";
+    const itemsCount = Array.isArray(data.items) ? data.items.length : 0;
+    const description = text.trim() || (itemsCount > 0 ? `Divergência de entrega em ${itemsCount} item(ns).` : "");
+    if (!description) {
       throw new AppError(400, "A descrição da divergência é obrigatória.");
     }
-    const divergence = await prisma.orderDeliveryDivergence.create({
+    const created = await prisma.orderDeliveryDivergence.create({
       data: {
         orderId: data.orderId,
         reportedById: user.userId,
-        description: data.description,
+        description,
       },
+      include: this.divergenceInclude,
     });
     await notificationService.deliveryDivergenceCreated({ orderId: data.orderId, reporterId: user.userId });
-    return divergence;
+    return this.formatDivergence(created, await this.userNamesById([user.userId]));
   }
 
-  async resolveDeliveryDivergence(user: AccessUser, id: string, notes?: string) {
+  async resolveDeliveryDivergence(user: AccessUser, id: string, notes?: unknown) {
     if (!accessService.isSuprimentos(user)) {
       throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem resolver divergências.");
+    }
+    if (notes !== undefined && notes !== null && (typeof notes !== "string" || notes.length > 2000)) {
+      throw new AppError(400, "Observação de resolução inválida.");
     }
     const divergence = await prisma.orderDeliveryDivergence.findFirst({
       where: { id, order: { contract: accessService.contractFilter(user) } },
@@ -1056,14 +1142,16 @@ export class OrderService {
       throw new AppError(404, "Divergência não encontrada.");
     }
 
-    return prisma.orderDeliveryDivergence.update({
+    const updated = await prisma.orderDeliveryDivergence.update({
       where: { id },
       data: {
         status: "resolvida",
-        notes,
+        notes: notes ?? undefined,
         resolvedAt: new Date(),
       },
+      include: this.divergenceInclude,
     });
+    return this.formatDivergence(updated, await this.userNamesById([updated.reportedById]));
   }
 
   // ─── Relatos de Problemas ───────────────────────────────────────────────────
@@ -1149,11 +1237,13 @@ export class OrderService {
       mes: o.mes,
       ano: o.ano,
       competenceMonth: `${o.ano}-${String(o.mes).padStart(2, "0")}`,
+      competence_month: `${o.ano}-${String(o.mes).padStart(2, "0")}-01`,
       is_extra_order: o.isExtraOrder,
       isExtraOrder: o.isExtraOrder,
       notes: o.notes,
       total_amount: Number(o.totalAmount),
       totalAmount: Number(o.totalAmount),
+      total: Number(o.totalAmount),
       created_at: o.createdAt.toISOString(),
       createdAt: o.createdAt.toISOString(),
       updated_at: o.updatedAt.toISOString(),
