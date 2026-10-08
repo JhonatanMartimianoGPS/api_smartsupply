@@ -184,6 +184,10 @@ export class ProductService {
     supplierId?: string;
     imageUrl?: string;
   }) {
+    if (!data.name?.trim()) {
+      throw new AppError(400, "Nome do produto é obrigatório.");
+    }
+
     const product = await prisma.product.create({
       data: {
         name: data.name,
