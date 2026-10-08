@@ -24,6 +24,21 @@ router.delete("/:id", authorize(["super_admin"]), (req, res, next) =>
   contractController.delete(req, res, next),
 );
 
+// Suborçamentos por categoria de produto. Quem pode gerenciar é validado na rota (authorize) e de novo
+// no service; o acesso ao contrato é validado no service.
+router.get("/:id/sub-budgets", (req, res, next) => contractController.listSubbudgets(req, res, next));
+router.get("/:id/sub-budgets/periods", (req, res, next) => contractController.listSubbudgetPeriods(req, res, next));
+router.post("/:id/sub-budgets", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
+  contractController.createSubbudget(req, res, next),
+);
+router.patch("/sub-budgets/:id", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
+  contractController.updateSubbudget(req, res, next),
+);
+router.patch("/sub-budgets/:id/lifecycle", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
+  contractController.setSubbudgetActive(req, res, next),
+);
+router.get("/:id/budget-breakdown", (req, res, next) => contractController.getBudgetBreakdown(req, res, next));
+
 // Períodos e produtos do contrato
 router.get("/:id/budget-periods", (req, res, next) =>
   contractController.getBudgetHistory(req, res, next),

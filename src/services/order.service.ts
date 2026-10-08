@@ -87,7 +87,7 @@ export class OrderService {
    * gravar apagaria o consumo da outra (e dois upserts poderiam tentar criar o mesmo período).
    * Deve ser chamado depois de mudar o status do pedido, na mesma transação.
    */
-  private async recalculateCategoryBudgets(tx: Prisma.TransactionClient, contractId: string, ano: number, mes: number) {
+  async recalculateCategoryBudgets(tx: Prisma.TransactionClient, contractId: string, ano: number, mes: number) {
     const periodMonth = `${ano}-${String(mes).padStart(2, "0")}`;
 
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`catbudget:${contractId}:${periodMonth}`}))`;
