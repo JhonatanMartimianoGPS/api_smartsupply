@@ -3,6 +3,7 @@ import { AppError } from "../middlewares/error.middleware.js";
 import type { Contract, OrderStatus, Prisma } from "@prisma/client";
 import { auditService } from "./audit.service.js";
 import { accessService, type AccessUser } from "./access.service.js";
+import { notificationService } from "./notification.service.js";
 
 // Pedido "ativo": ocupa a competência do contrato. Rejeitado e cancelado liberam o mês.
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["pendente", "aprovado", "entregue"];
@@ -571,6 +572,8 @@ export class OrderService {
       });
     });
 
+    await notificationService.orderCreated({ orderId: order.id, isExtra: false, contract, actorId: userId });
+
     return this.formatOrder(order);
   }
 
@@ -648,6 +651,8 @@ export class OrderService {
         items: true,
       },
     });
+
+    await notificationService.orderCreated({ orderId: order.id, isExtra: true, contract, actorId: userId });
 
     return this.formatOrder(order);
   }
@@ -795,6 +800,14 @@ export class OrderService {
       details: `Status alterado de "${oldStatus}" para "${newStatus}"${data.notes ? ` (${data.notes})` : ""}`,
       diffBefore: { status: oldStatus },
       diffAfter: { status: newStatus },
+    });
+
+    await notificationService.orderStatusChanged({
+      orderId,
+      isExtra: order.isExtraOrder,
+      contractName: order.contract.name,
+      creatorId: order.createdById,
+      status: newStatus,
     });
 
     return {
@@ -1020,13 +1033,15 @@ export class OrderService {
     if (typeof data.description !== "string" || !data.description.trim()) {
       throw new AppError(400, "A descrição da divergência é obrigatória.");
     }
-    return prisma.orderDeliveryDivergence.create({
+    const divergence = await prisma.orderDeliveryDivergence.create({
       data: {
         orderId: data.orderId,
         reportedById: user.userId,
         description: data.description,
       },
     });
+    await notificationService.deliveryDivergenceCreated({ orderId: data.orderId, reporterId: user.userId });
+    return divergence;
   }
 
   async resolveDeliveryDivergence(user: AccessUser, id: string, notes?: string) {

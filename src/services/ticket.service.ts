@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import { notificationService } from "./notification.service.js";
 import type { TicketPriority, TicketStatus } from "@prisma/client";
 
 export class TicketService {
@@ -110,10 +111,33 @@ export class TicketService {
       },
     });
 
+    await notificationService.ticketCreated({
+      ticketId: ticket.id,
+      title: ticket.title,
+      contractName: ticket.contract?.name ?? null,
+      regionalId: ticket.regionalId,
+      actorId: userId,
+    });
+
     return this.formatTicket(ticket);
   }
 
+  /** Avisa quem abriu o chamado quando o status ou o fluxo mudou (o que os três métodos abaixo fazem). */
+  private async notifyIfTicketChanged(
+    before: { status: TicketStatus; flowId: string | null } | null,
+    after: { id: string; title: string; createdById: string; status: TicketStatus; flowId: string | null },
+  ) {
+    if (!before || (before.status === after.status && before.flowId === after.flowId)) return;
+    await notificationService.ticketStatusChanged({
+      ticketId: after.id,
+      title: after.title,
+      creatorId: after.createdById,
+      status: after.status,
+    });
+  }
+
   async updateStatus(id: string, status: TicketStatus) {
+    const before = await prisma.serviceTicket.findUnique({ where: { id }, select: { status: true, flowId: true } });
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: {
@@ -122,6 +146,7 @@ export class TicketService {
       },
       include: { contract: true, type: true, supplier: true },
     });
+    await this.notifyIfTicketChanged(before, ticket);
     return this.formatTicket(ticket);
   }
 
@@ -159,6 +184,7 @@ export class TicketService {
   }
 
   async attend(id: string, data: { flowId?: string; supplierId?: string }) {
+    const before = await prisma.serviceTicket.findUnique({ where: { id }, select: { status: true, flowId: true } });
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: {
@@ -168,15 +194,18 @@ export class TicketService {
       },
       include: { contract: true, type: true, supplier: true },
     });
+    await this.notifyIfTicketChanged(before, ticket);
     return this.formatTicket(ticket);
   }
 
   async startAttention(id: string) {
+    const before = await prisma.serviceTicket.findUnique({ where: { id }, select: { status: true, flowId: true } });
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: { status: "em_atendimento" },
       include: { contract: true, type: true, supplier: true },
     });
+    await this.notifyIfTicketChanged(before, ticket);
     return this.formatTicket(ticket);
   }
 
@@ -225,15 +254,21 @@ export class TicketService {
       },
     });
 
+    if (completed) {
+      await notificationService.ticketStepCompleted({ ticketId: step.ticketId, stepTitle: step.title });
+    }
+
     // Se todas as etapas foram concluídas, conclui o chamado
     const remaining = await prisma.ticketStep.count({
       where: { ticketId: step.ticketId, completed: false },
     });
     if (remaining === 0) {
-      await prisma.serviceTicket.update({
+      const before = await prisma.serviceTicket.findUnique({ where: { id: step.ticketId }, select: { status: true, flowId: true } });
+      const ticket = await prisma.serviceTicket.update({
         where: { id: step.ticketId },
         data: { status: "concluido", resolvedAt: new Date() },
       });
+      await this.notifyIfTicketChanged(before, ticket);
     }
 
     return updated;
@@ -277,6 +312,8 @@ export class TicketService {
         user: { select: { id: true, name: true, email: true, role: true, avatarUrl: true } },
       },
     });
+
+    await notificationService.ticketMessageCreated({ ticketId, authorId: userId, message, isInternal });
 
     return {
       id: msg.id,

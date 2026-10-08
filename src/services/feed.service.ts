@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { notificationService } from "./notification.service.js";
 import { AppError } from "../middlewares/error.middleware.js";
 
 export class FeedService {
@@ -56,6 +57,8 @@ export class FeedService {
         user: { select: { id: true, name: true, role: true, department: true, avatarUrl: true } },
       },
     });
+
+    await notificationService.feedPostCreated({ postId: post.id, authorId: userId });
 
     return {
       ...post,

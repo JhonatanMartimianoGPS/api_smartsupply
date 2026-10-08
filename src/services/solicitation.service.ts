@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import { notificationService } from "./notification.service.js";
 
 export class SolicitationService {
   async listSolicitations(params?: { contractId?: string; status?: string }) {
@@ -55,7 +56,7 @@ export class SolicitationService {
       };
     });
 
-    return prisma.solicitation.create({
+    const solicitation = await prisma.solicitation.create({
       data: {
         contractId: data.contractId,
         createdById: userId,
@@ -78,6 +79,13 @@ export class SolicitationService {
         items: true,
       },
     });
+
+    await notificationService.solicitationCreated({
+      solicitationId: solicitation.id,
+      contract: solicitation.contract,
+      actorId: userId,
+    });
+    return solicitation;
   }
 
   async updateItems(
@@ -148,6 +156,17 @@ export class SolicitationService {
         items: true,
       },
     });
+
+    // Avisa quem criou a solicitação quando o status ou a etapa mudou
+    if (s.status !== updated.status || s.step !== updated.step) {
+      await notificationService.solicitationStatusChanged({
+        solicitationId: id,
+        contractName: updated.contract.name,
+        creatorId: updated.createdById,
+        status: updated.status,
+        step: updated.step,
+      });
+    }
 
     return updated;
   }
