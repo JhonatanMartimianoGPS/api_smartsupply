@@ -12,7 +12,6 @@ argument-hint: <o que mudar, ex. "adicionar coluna phone em users">
 - `prisma/schema/` é o modelo correto. `prisma/schema-prd-reference/` é só consulta do banco antigo: **não edite nem copie dela**.
 - Verifique quem usa o model (`Grep` por `prisma.<model>` em `src/`) e se o frontend depende da forma dele (`client_smartsupply/src/api` e `src/types`).
 - Explique ao dev, em uma frase, o que vai mudar no banco.
-- Se a mudança mexe em Produto, preço, orçamento ou categoria, confira se ela não contradiz a visão futura (produto separado de tabela de preço, orçamento por conta contábil e competência). Se contradisser, avise antes.
 
 ## 2. Edite o schema
 

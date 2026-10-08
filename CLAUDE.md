@@ -5,11 +5,9 @@ O frontend é outro repositório (`client_smartsupply`, React + Vite) e consome 
 
 ## Contexto do projeto
 
-- O sistema nasceu no Lovable, passou para Supabase nativo e agora usa **este backend próprio**.
-- No Supabase, as regras viviam em RLS, triggers e funções SQL. **Agora toda regra de negócio e de acesso fica no backend** (services e middlewares), nunca no banco.
-- Objetivo atual: **ter o sistema funcionando como antes (paridade com o Supabase)** e, ao mesmo tempo, deixar a base pronta para a visão futura da diretoria (orçamento por conta contábil e competência, produto separado de tabela de preço, notas fiscais, integração com ERP). Não feche portas para isso.
+- O sistema migrou do Supabase para este backend. No Supabase, as regras viviam em RLS, triggers e funções SQL. **Agora toda regra de negócio e de acesso fica no backend** (services e middlewares), nunca no banco.
+- Objetivo atual: **ter o sistema funcionando como antes (paridade com o Supabase)**.
 - `prisma/schema/` é o **modelo correto**. As pastas `prisma/schema-prd-reference/` e `prisma/migrations-prd-reference/` são só uma tradução 1:1 do banco antigo do Supabase para consulta de regras antigas: **nunca copie** convenções ou models delas e **não mexa** nelas.
-- O módulo Solicitações Especiais está marcado para ser excluído na visão futura: mantenha como está, sem evoluir.
 - Quando front e back divergem, o padrão é o **front se adaptar** ao modelo novo. Adaptadores no backend são transitórios e devem dizer isso em comentário (exemplo: `toProductInput` em `product.controller.ts`).
 
 ## Quem usa este projeto
@@ -18,13 +16,12 @@ A equipe tem **2 desenvolvedores júnior**. Toda decisão segue esta premissa:
 
 > O código precisa continuar simples e fácil de ler. Na dúvida entre "esperto" e "óbvio", escolha o óbvio.
 
-- Responda sempre em **português (pt-BR)**, explicando o *porquê* das mudanças em linguagem simples. O Rafa usa essas explicações para alinhar decisões com o time.
+- Responda sempre em **português (pt-BR)**, explicando o *porquê* das mudanças em linguagem simples.
 - Código, nomes de arquivos e variáveis ficam em **inglês**. Mensagens de erro para o usuário ficam em **português**, como no restante da API.
 - Comentários curtos, só quando explicam o *porquê*.
 - Não crie abstrações novas (repositories, injeção de dependência, generics, factories) sem o dev pedir.
 - Não adicione dependências novas sem perguntar antes.
 - Prefira copiar o padrão de um arquivo existente (`regional.*` é o mais simples) a inventar um novo.
-- As mudanças no backend são uma **evolução da base criada pelo Jhonatan** (tech lead). Em commits, textos e resumos, descreva assim: nunca como "refizemos" ou "corrigimos o que estava errado".
 
 ## Stack (versões reais)
 
@@ -86,23 +83,22 @@ Padrão do código (copie de `regional.*`):
 
 ## Banco, migrations e comandos perigosos
 
-- Subir o banco: o container se chama `smartsupply-db` (`docker-compose.yml`). **O comando `docker` não existe dentro do WSL**: não tente rodá-lo daqui. O banco responde em `localhost:5432`.
+- Subir o banco: o container se chama `smartsupply-db` (`docker-compose.yml`). O banco responde em `localhost:5432`.
 - **O estado das migrations não é confiável**: existem duas migrations "baseline" que conflitam e não há `migration_lock.toml`. O banco de desenvolvimento foi sincronizado com `prisma db push`. Não rode `migrate deploy` num banco novo esperando que funcione.
 - Scripts reais: `npm run dev`, `build`, `start`, `seed`, `test`, `prisma:generate`, `prisma:migrate`, `prisma:push`, `prisma:studio`.
 - **Nunca execute sem o dev pedir explicitamente**: `npx prisma migrate reset`, `npx prisma migrate deploy`, `docker compose down -v`, apagar ou editar migration já aplicada. Seed e `db push` alteram dados do banco local: só com pedido.
 - Antes de `npm run prisma:migrate`, mostre o que vai mudar e peça confirmação.
 
-## Ambiente (Windows 11 + WSL2)
+## Ambiente
 
-- Use o Node 22 do NVM: `export PATH="/home/rafa/.nvm/versions/node/v22.22.0/bin:$PATH"`.
-- Nunca use `sudo` interativo (use `sudo -n`).
-- Teste com `curl` (não `curl.exe`). API em `http://localhost:3000`, Swagger em `/api-docs`, front em `http://localhost:5174`.
+- Use Node 22. Nunca use `sudo` interativo (use `sudo -n`).
+- API em `http://localhost:3000`, Swagger em `/api-docs`, front em `http://localhost:5174`.
 - Usuários do seed (senha `admin123`): `admin@`, `admin.sp@`, `gestor@`, `suprimentos@`, `assistente@`, `colaborador@` — todos `@gpssa.com.br`. A senha vale só para o ambiente local.
 - Nunca exiba segredos do `.env`.
 
 ## Git
 
-- **Nunca faça `git push`** sem o Rafa autorizar expressamente na conversa.
+- **Nunca faça `git push`** sem o dev pedir expressamente.
 - Commits em **português**, no formato `tipo(escopo): descrição` (como o histórico: `feat(prisma): …`, `fix(cors): …`).
 - Não crie commit sem o dev pedir.
 

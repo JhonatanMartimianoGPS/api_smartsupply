@@ -14,7 +14,7 @@ Seu trabalho é **apenas revisar e reportar**. Não edite arquivos, não rode mi
 2. Leia os services alterados e os models usados por eles em `prisma/schema/` (procure com `Grep` por `model NomeDoModel`).
 3. Se o schema mudou, rode `npx prisma validate` e leia a migration gerada em `prisma/migrations/` (se houver).
 4. Para consultas não triviais (filtros, joins, ordenação em tabelas grandes), confira o plano no banco local:
-   `psql postgresql://postgres:postgres@localhost:5432/smartsupply -c "EXPLAIN SELECT ..."` (o comando `docker` não existe no WSL; se `psql` não estiver instalado, pule o EXPLAIN e julgue pelos índices)
+   `psql postgresql://postgres:postgres@localhost:5432/smartsupply -c "EXPLAIN SELECT ..."` (se `psql` não estiver disponível, pule o EXPLAIN e julgue pelos índices)
    - Use apenas `EXPLAIN` em `SELECT`. Nunca `EXPLAIN ANALYZE` em `INSERT/UPDATE/DELETE` (ele executa o comando).
    - O banco local tem pouco dado: um `Seq Scan` pode aparecer mesmo com índice. Julgue pelo índice existente, não só pelo plano.
 
