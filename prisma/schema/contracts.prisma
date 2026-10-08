@@ -49,6 +49,7 @@ model Contract {
   stockGrupos            StockGrupo[]
   stockCentros           StockCentroDistribuicao[]
 
+  @@index([regionalId])
   @@map("contracts")
 }
 
