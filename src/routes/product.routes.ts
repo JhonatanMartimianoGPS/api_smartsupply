@@ -26,6 +26,10 @@ router.get("/paginated", (req, res, next) => productController.listPaginated(req
 router.get("/filter-options", (req, res, next) => productController.getFilterOptions(req, res, next));
 router.get("/duplicate-index", (req, res, next) => productController.getDuplicateIndex(req, res, next));
 router.get("/", (req, res, next) => productController.list(req, res, next));
+// Validação do rascunho de pedido: quais produtos podem entrar no contrato
+router.post("/validate-contract-draft-items", (req, res, next) =>
+  productController.validateContractDraftItems(req, res, next),
+);
 
 // Detalhes, criação, edição e exclusão
 router.get("/:id", (req, res, next) => productController.getById(req, res, next));

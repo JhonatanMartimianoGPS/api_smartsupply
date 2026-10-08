@@ -3,6 +3,52 @@ import { AppError } from "../middlewares/error.middleware.js";
 
 export class ProductService {
   /**
+   * Confere, item a item, se os produtos de um rascunho de pedido podem entrar no contrato.
+   * Mesma regra usada ao gravar o pedido (order.service prepareItems): produto ativo e da regional
+   * do contrato, ou global (sem regional). Devolve o formato que o frontend lê (herdado do RPC
+   * validate_contract_draft_items do Supabase).
+   */
+  async validateContractDraftItems(contract: { id: string; regionalId: string }, productIds: string[]) {
+    const ids = [...new Set(productIds)];
+    if (ids.length === 0) return [];
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, active: true, regionalId: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    return ids.map((productId) => {
+      const product = byId.get(productId);
+      // Produto inativo saiu do catálogo: para o pedido é o mesmo que não existir
+      const existsInCatalog = Boolean(product?.active);
+      const matchesRegional = product ? product.regionalId === null || product.regionalId === contract.regionalId : false;
+      const available = existsInCatalog && matchesRegional;
+
+      let reasonCode: "ok" | "product_deleted" | "regional_mismatch" = "ok";
+      let reasonMessage = "Produto disponível para este contrato.";
+      if (!existsInCatalog) {
+        reasonCode = "product_deleted";
+        reasonMessage = "Produto removido do catálogo.";
+      } else if (!matchesRegional) {
+        reasonCode = "regional_mismatch";
+        reasonMessage = "Produto pertence a outra regional.";
+      }
+
+      return {
+        product_id: productId,
+        exists_in_catalog: existsInCatalog,
+        available_for_contract: available,
+        // Transitório: no modelo atual a disponibilidade é por regional; o frontend só lê available_for_contract
+        availability_source: available ? "direct_contract" : null,
+        removed_from_catalog: !existsInCatalog,
+        reason_code: reasonCode,
+        reason_message: reasonMessage,
+      };
+    });
+  }
+
+  /**
    * Lista catálogo de produtos com filtros simples
    */
   async listProducts(params?: {

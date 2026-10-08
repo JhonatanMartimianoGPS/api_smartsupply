@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { productService } from "../services/product.service.js";
 import { accessService } from "../services/access.service.js";
+import { AppError } from "../middlewares/error.middleware.js";
 
 // Parâmetros de URL podem chegar como lista ou objeto (?a[b]=c): só aceitamos texto.
 // O byte nulo (%00) é recusado porque o PostgreSQL não o aceita em texto.
@@ -83,6 +84,20 @@ export class ProductController {
         productIds,
         sort: asString(q.sort),
       });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async validateContractDraftItems(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { contractId, productIds } = req.body ?? {};
+      if (!Array.isArray(productIds) || productIds.length > 500 || !productIds.every((id) => typeof id === "string" && id !== "")) {
+        throw new AppError(400, "Informe a lista de produtos (até 500 itens).");
+      }
+      const contract = await accessService.assertContractAccess(req.user!, contractId);
+      const result = await productService.validateContractDraftItems(contract, productIds);
       res.json(result);
     } catch (error) {
       next(error);
