@@ -1,0 +1,99 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. PEDIDOS, ITENS & DIVERGÊNCIAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Order {
+  id           String      @id @default(uuid())
+  contractId   String      @map("contract_id")
+  createdById  String      @map("created_by")
+  status       OrderStatus @default(pendente)
+  mes          Int
+  ano          Int
+  isExtraOrder Boolean     @default(false) @map("is_extra_order")
+  notes        String?
+  totalAmount  Decimal     @default(0) @map("total_amount") @db.Decimal(12, 2)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  contract     Contract                  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  createdBy    User                      @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items        OrderItem[]
+  history      OrderHistory[]
+  divergences  OrderDeliveryDivergence[]
+  issueReports OrderIssueReport[]
+  stockEntradas StockEntrada[]
+
+  @@index([contractId, status, createdAt])
+  @@index([status, mes, ano])
+  @@index([createdById])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                         String   @id @default(uuid())
+  orderId                    String   @map("order_id")
+  productId                  String?  @map("product_id")
+  quantity                   Int      @default(1)
+  unitPrice                  Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  productNameSnapshot        String?  @map("product_name_snapshot")
+  productCodigoSnapshot      String?  @map("product_codigo_snapshot")
+  productUnidadeSnapshot     String?  @map("product_unidade_snapshot")
+  productCategoriaSnapshot   String?  @map("product_categoria_snapshot")
+  productFornecedorSnapshot  String?  @map("product_fornecedor_snapshot")
+  productTabelaSnapshot      Decimal? @map("product_tabela_snapshot") @db.Decimal(10, 2)
+  productImageUrlSnapshot    String?  @map("product_image_url_snapshot")
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, productId])
+  @@map("order_items")
+}
+
+model OrderHistory {
+  id        String       @id @default(uuid())
+  orderId   String       @map("order_id")
+  userId    String?      @map("user_id")
+  action    String
+  details   String?
+  oldStatus OrderStatus? @map("old_status")
+  newStatus OrderStatus? @map("new_status")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_history")
+}
+
+model OrderDeliveryDivergence {
+  id           String    @id @default(uuid())
+  orderId      String    @map("order_id")
+  reportedById String    @map("reported_by_id")
+  description  String
+  status       String    @default("pendente") // pendente, resolvida
+  notes        String?
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_delivery_divergences")
+}
+
+model OrderIssueReport {
+  id           String    @id @default(uuid())
+  orderId      String    @map("order_id")
+  reportedById String    @map("reported_by_id")
+  description  String
+  status       String    @default("aberto") // aberto, em_analise, resolvido
+  notes        String?
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_issue_reports")
+}

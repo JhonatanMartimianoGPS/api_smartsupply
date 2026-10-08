@@ -1,0 +1,113 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. CATÁLOGO DE PRODUTOS & FORNECEDORES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  icon        String?
+  description String?
+  externalKey String?  @map("external_key")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products              Product[]
+  contractBudgets       ContractProductCategoryBudget[]
+  contractCategoryLinks ContractCategoryProductCategoryLink[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  codigo     String?
+  descricao  String?
+  unidade    String   @default("UN")
+  tabela     Decimal  @default(0) @db.Decimal(10, 2)
+  categoryId String?  @map("category_id")
+  regionalId String?  @map("regional_id")
+  supplierId String?  @map("supplier_id")
+  imageUrl   String?  @map("image_url")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category       ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  regional       Regional?            @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  supplier       RegisteredSupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  orderItems     OrderItem[]
+  ticketProducts TicketProduct[]
+  history        ProductHistory[]
+  solicitationItems SolicitationItem[]
+  stockProdutos  StockProduto[]
+
+  @@index([regionalId, categoryId, active])
+  @@index([codigo])
+  @@map("products")
+}
+
+model ProductHistory {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  userId    String?  @map("user_id")
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_history")
+}
+
+model RegisteredSupplier {
+  id                 String   @id @default(uuid())
+  name               String   @map("name")
+  razaoSocial        String?  @map("razao_social")
+  tradeName          String?  @map("trade_name")
+  cnpj               String?  @unique
+  email              String?
+  phone              String?
+  telefone           String?
+  contatoNome        String?  @map("contato_nome")
+  observacoes        String?
+  zipCode            String?  @map("zip_code")
+  state              String?  @map("state")
+  city               String?  @map("city")
+  neighborhood       String?  @map("neighborhood")
+  addressNumber      String?  @map("address_number")
+  addressComplement  String?  @map("address_complement")
+  externalKey        String?  @map("external_key")
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  products  Product[]
+  regionals SupplierRegional[]
+  tickets   ServiceTicket[]
+  stockEntradas StockEntrada[]
+
+  @@map("registered_suppliers")
+}
+
+model SupplierRegional {
+  id                    String   @id @default(uuid())
+  supplierId            String   @map("supplier_id")
+  regionalId            String   @map("regional_id")
+  deliveryLeadTimeDays  Int?     @map("delivery_lead_time_days")
+  minDeliveryValue      Decimal? @default(0) @map("min_delivery_value") @db.Decimal(12, 2)
+  freightValue          Decimal? @default(0) @map("freight_value") @db.Decimal(12, 2)
+  minOrderValue         Decimal? @map("min_order_value") @db.Decimal(10, 2)
+  freeShippingThreshold Decimal? @map("free_shipping_threshold") @db.Decimal(10, 2)
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  supplier RegisteredSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  regional Regional           @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, regionalId])
+  @@map("supplier_service_regionals")
+}

@@ -1,0 +1,81 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. USUÁRIOS & REGIONAIS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         AppRole   @default(colaborador)
+  department   String?
+  cargo        String?
+  phone        String?
+  avatarUrl    String?   @map("avatar_url")
+  taxId        String?   @map("tax_id")
+  externalKey  String?   @map("external_key")
+  externalIntegrationEnabled Boolean @default(false) @map("external_integration_enabled")
+  isActive     Boolean   @default(true) @map("is_active")
+  isBlocked    Boolean   @default(false) @map("is_blocked")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relacionamentos
+  regionals      UserRegional[]
+  contracts      UserContract[]
+  teamMembers    TeamMember[]
+  createdOrders  Order[]              @relation("OrderCreatedBy")
+  ticketsCreated ServiceTicket[]      @relation("TicketCreatedBy")
+  ticketsAssigned ServiceTicket[]     @relation("TicketAssignedTo")
+  ticketMessages TicketMessage[]
+  feedPosts      FeedPost[]
+  feedComments   FeedComment[]
+  feedLikes      FeedLike[]
+  notifications  AppNotification[]
+  presences      UserPresence[]
+  solicitations  Solicitation[]       @relation("SolicitationCreatedBy")
+  solicitationHistory SolicitationHistory[]
+  stockEntradasRegistradas StockEntrada[] @relation("StockEntradaRegistradoPor")
+  stockSaidasRegistradas StockSaida[] @relation("StockSaidaRegistradoPor")
+  stockSaidasRetiradas StockSaida[] @relation("StockSaidaRetiradoPor")
+  stockPatrimoniosResponsavel StockPatrimonioItem[] @relation("StockPatrimonioResponsavel")
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model Regional {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  externalKey String?  @map("external_key")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users              UserRegional[]
+  contracts          Contract[]
+  contractCategories ContractCategory[]
+  products           Product[]
+  tickets            ServiceTicket[]
+  suppliers          SupplierRegional[]
+  teamMembers        TeamMember[]
+  stockGrupos        StockGrupo[]
+  stockCentros       StockCentroDistribuicao[]
+
+  @@map("regionals")
+}
+
+model UserRegional {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  regionalId String   @map("regional_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  regional Regional @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, regionalId])
+  @@map("user_regionals")
+}
