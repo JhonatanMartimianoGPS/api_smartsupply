@@ -1,6 +1,6 @@
 ---
 name: schema-change
-description: Altera a estrutura do banco (novo model, coluna, índice, relação) em prisma/schema com cuidado, já que o histórico de migrations do projeto é inconsistente. Use quando o dev pedir para criar/alterar tabela, coluna ou índice.
+description: Altera a estrutura do banco (novo model, coluna, índice, relação) em prisma/schema gerando uma migration nova. Use quando o dev pedir para criar/alterar tabela, coluna ou índice.
 argument-hint: <o que mudar, ex. "adicionar coluna phone em users">
 ---
 
@@ -46,17 +46,22 @@ Model em PascalCase singular, tabela em snake_case plural via `@@map`, campos ca
 npx prisma validate
 ```
 
-## 4. Aplique no banco (com confirmação)
+## 4. Gere a migration (com confirmação)
 
-O histórico de `prisma/migrations/` **não é confiável**: há duas migrations "baseline" que conflitam e não existe `migration_lock.toml`. O banco local foi sincronizado com `prisma db push`.
+O histórico de `prisma/schema/migrations/` (dentro da pasta do schema, que é onde o Prisma procura com o schema dividido em vários arquivos) é uma baseline mais migrations incrementais. Toda mudança de schema precisa gerar uma migration nova, e **`db push` não é usado**: ele muda o banco sem deixar histórico.
 
-Mostre ao dev o que mudou e **peça confirmação** antes de qualquer comando que altere o banco. Explique as opções e deixe ele escolher:
-- `npm run prisma:push` — rápido, sem arquivo de migration (é o que vinha sendo usado em desenvolvimento). O `settings.json` **bloqueia** esse comando: o dev roda por conta própria ou libera a regra;
-- `npm run prisma:migrate -- --name <descricao-curta-em-ingles>` — gera a migration, mas pode falhar por causa do histórico atual.
+Mostre ao dev o que mudou e **peça confirmação** antes de qualquer comando que altere o banco:
 
-Depois rode `npm run prisma:generate`. Se gerou migration, leia o `migration.sql` e confira: não há `DROP` inesperado nem perda de dados. **Não edite migration já aplicada**: crie outra corrigindo.
+```bash
+npm run prisma:migrate -- --name <descricao-curta-em-ingles>
+npm run prisma:generate
+```
 
-Nunca rode `npx prisma migrate reset` nem `migrate deploy` sem o dev pedir.
+Leia o `migration.sql` gerado e confira: não há `DROP` inesperado nem perda de dados, e uma coluna nova em tabela com dados é opcional ou tem `@default`. Se a mudança precisa preencher dados existentes, acrescente o `UPDATE` no próprio `migration.sql`. **Não edite migration já aplicada**: crie outra corrigindo.
+
+Para conferir sem tocar no banco do dev, compare o histórico com o schema num banco descartável: `npx prisma migrate diff --from-migrations prisma/schema/migrations --to-schema-datamodel prisma/schema --shadow-database-url <url de um banco vazio>` (o resultado esperado é "empty migration").
+
+Nunca rode `npx prisma migrate reset`, `migrate deploy`, `migrate resolve` nem `db push` sem o dev pedir.
 
 ## 5. Valide (obrigatório)
 

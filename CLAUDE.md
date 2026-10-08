@@ -84,9 +84,10 @@ Padrão do código (copie de `regional.*`):
 ## Banco, migrations e comandos perigosos
 
 - Subir o banco: o container se chama `smartsupply-db` (`docker-compose.yml`). O banco responde em `localhost:5432`.
-- **O estado das migrations não é confiável**: existem duas migrations "baseline" que conflitam e não há `migration_lock.toml`. O banco de desenvolvimento foi sincronizado com `prisma db push`. Não rode `migrate deploy` num banco novo esperando que funcione.
-- Scripts reais: `npm run dev`, `build`, `start`, `seed`, `test`, `prisma:generate`, `prisma:migrate`, `prisma:push`, `prisma:studio`.
-- **Nunca execute sem o dev pedir explicitamente**: `npx prisma migrate reset`, `npx prisma migrate deploy`, `docker compose down -v`, apagar ou editar migration já aplicada. Seed e `db push` alteram dados do banco local: só com pedido.
+- **Histórico de migrations**: `prisma/schema/migrations/` (dentro da pasta do schema: com o schema dividido em vários arquivos, o Prisma procura as migrations ali, e não em `prisma/migrations/`) tem uma baseline (`20261008120000_baseline`, o schema completo na data) e migrations incrementais por cima, mais o `migration_lock.toml`. Toda mudança de schema vira uma migration nova, versionada junto com o código. **Não use `db push`**: ele muda o banco sem gerar migration e faz o histórico divergir do schema.
+- Mudou o schema? Edite `prisma/schema/`, rode `npm run prisma:migrate -- --name <descricao-curta-em-ingles>`, leia o `migration.sql` gerado e commite a pasta nova junto com o schema.
+- Scripts reais: `npm run dev`, `build`, `start`, `seed`, `test`, `prisma:generate`, `prisma:migrate`, `prisma:studio`.
+- **Nunca execute sem o dev pedir explicitamente**: `npx prisma migrate reset`, `npx prisma migrate deploy`, `npx prisma migrate resolve`, `npx prisma db push`, `docker compose down -v`, apagar ou editar migration já aplicada. Seed e migrations alteram o banco local: só com pedido.
 - Antes de `npm run prisma:migrate`, mostre o que vai mudar e peça confirmação.
 
 ## Ambiente
