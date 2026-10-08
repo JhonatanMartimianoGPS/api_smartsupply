@@ -39,3 +39,30 @@ export const updateSystemModuleCategorySchema = createSystemModuleCategorySchema
 export type UpdateSystemModuleInput = z.infer<typeof updateSystemModuleSchema>;
 export type CreateSystemModuleCategoryInput = z.infer<typeof createSystemModuleCategorySchema>;
 export type UpdateSystemModuleCategoryInput = z.infer<typeof updateSystemModuleCategorySchema>;
+
+// ─── Ações administrativas sobre usuários (/system/admin-actions/*) ──────────
+// A tela envia targetUserId e os campos em camelCase (fullName, newPassword...).
+const targetUserId = z.string({ required_error: "Usuário é obrigatório." }).min(1);
+const fullName = z.string({ required_error: "O nome é obrigatório." }).trim().min(1).max(150);
+const email = z.string({ required_error: "O e-mail é obrigatório." }).trim().toLowerCase().email("E-mail inválido.");
+const password = z.string().min(6, "A senha precisa ter ao menos 6 caracteres.").max(100);
+
+export const adminCreateUserSchema = z.object({
+  email,
+  password: password.optional(),
+  fullName,
+  role: z.nativeEnum(AppRole, { required_error: "O perfil é obrigatório." }),
+  regionalIds: z.array(z.string().min(1)).max(50).optional(),
+  contractIds: z.array(z.string().min(1)).max(500).optional(),
+});
+export const adminTargetUserSchema = z.object({ targetUserId });
+export const adminResetPasswordSchema = z.object({
+  targetUserId,
+  newPassword: password.describe("nova senha"),
+});
+export const adminUpdateProfileSchema = z.object({ targetUserId, fullName });
+export const adminUpdateEmailSchema = z.object({ targetUserId, email });
+export const adminUpdateRoleSchema = z.object({
+  targetUserId,
+  role: z.nativeEnum(AppRole, { required_error: "O perfil é obrigatório." }),
+});

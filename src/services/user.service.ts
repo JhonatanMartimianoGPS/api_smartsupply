@@ -3,6 +3,34 @@ import { hashPassword } from "../utils/password.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type { AppRole } from "@prisma/client";
 
+// Transitório: as telas leem fullName/full_name, user_id, regionalIds/contractIds e assigned_contracts
+// (nomes herdados do Supabase). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
+function formatUser(u: any) {
+  const { passwordHash: _passwordHash, regionals = [], contracts = [], ...rest } = u;
+  const regionalIds = regionals.map((r: any) => r.regionalId);
+  const contractIds = contracts.map((c: any) => c.contractId);
+  return {
+    ...rest,
+    user_id: u.id,
+    fullName: u.name,
+    full_name: u.name,
+    is_blocked: u.isBlocked,
+    regional_ids: regionalIds,
+    regionalIds,
+    regionals: regionals.map((r: any) => r.regional).filter(Boolean),
+    contract_ids: contractIds,
+    contractIds,
+    assigned_contracts: contractIds,
+    contracts: contracts.map((c: any) => c.contract).filter(Boolean),
+    created_at: u.createdAt?.toISOString?.() ?? u.createdAt,
+  };
+}
+
+const USER_RELATIONS = {
+  regionals: { include: { regional: true } },
+  contracts: { include: { contract: true } },
+} as const;
+
 export class UserService {
   /**
    * Lista usuários com filtros opcionais
@@ -63,13 +91,7 @@ export class UserService {
       orderBy: { name: "asc" },
     });
 
-    return users.map((u) => ({
-      ...u,
-      regional_ids: u.regionals.map((r) => r.regionalId),
-      regionals: u.regionals.map((r) => r.regional),
-      contract_ids: u.contracts.map((c) => c.contractId),
-      contracts: u.contracts.map((c) => c.contract),
-    }));
+    return users.map(formatUser);
   }
 
   /**
@@ -110,14 +132,7 @@ export class UserService {
       throw new AppError(404, "Usuário não encontrado.");
     }
 
-    const { passwordHash, ...safeUser } = user;
-    return {
-      ...safeUser,
-      regional_ids: user.regionals.map((r) => r.regionalId),
-      regionals: user.regionals.map((r) => r.regional),
-      contract_ids: user.contracts.map((c) => c.contractId),
-      contracts: user.contracts.map((c) => c.contract),
-    };
+    return formatUser(user);
   }
 
   /**
@@ -138,6 +153,9 @@ export class UserService {
     if (existing) {
       throw new AppError(400, "Já existe um usuário cadastrado com este e-mail.");
     }
+
+    await this.assertRegionalsExist(data.regionalIds);
+    await this.assertContractsExist(data.contractIds);
 
     const initialPassword = data.password || "Gps@123456";
     const passwordHash = await hashPassword(initialPassword);
@@ -162,10 +180,100 @@ export class UserService {
             }
           : undefined,
       },
+      include: USER_RELATIONS,
     });
 
-    const { passwordHash: _, ...safeUser } = user;
-    return safeUser;
+    return formatUser(user);
+  }
+
+  private async assertRegionalsExist(ids?: string[]) {
+    const unique = [...new Set(ids ?? [])];
+    if (unique.length === 0) return;
+    const found = await prisma.regional.count({ where: { id: { in: unique } } });
+    if (found !== unique.length) {
+      throw new AppError(400, "Uma das regionais informadas não existe.");
+    }
+  }
+
+  private async assertContractsExist(ids?: string[]) {
+    const unique = [...new Set(ids ?? [])];
+    if (unique.length === 0) return;
+    const found = await prisma.contract.count({ where: { id: { in: unique } } });
+    if (found !== unique.length) {
+      throw new AppError(400, "Um dos contratos informados não existe.");
+    }
+  }
+
+  // ─── Ações administrativas (tela de usuários) ──────────────────────────────
+  // Só o super_admin mexe em contas de super_admin (criar, mudar o perfil, excluir).
+  private assertCanManageRole(actor: { role: AppRole }, role: AppRole | null | undefined) {
+    if (role === "super_admin" && actor.role !== "super_admin") {
+      throw new AppError(403, "Somente o super administrador pode gerenciar contas de super administrador.");
+    }
+  }
+
+  private async findUser(id: string) {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new AppError(404, "Usuário não encontrado.");
+    }
+    return user;
+  }
+
+  async adminCreateUser(
+    actor: { userId: string; role: AppRole },
+    data: { email: string; password?: string; fullName: string; role: AppRole; regionalIds?: string[]; contractIds?: string[] },
+  ) {
+    this.assertCanManageRole(actor, data.role);
+    return this.createUser({
+      email: data.email,
+      password: data.password,
+      name: data.fullName,
+      role: data.role,
+      regionalIds: data.regionalIds,
+      contractIds: data.contractIds,
+    });
+  }
+
+  async adminUpdateName(actor: { role: AppRole }, id: string, fullName: string) {
+    const target = await this.findUser(id);
+    this.assertCanManageRole(actor, target.role);
+    return this.updateUser(id, { name: fullName });
+  }
+
+  async adminUpdateEmail(actor: { role: AppRole }, id: string, email: string) {
+    const target = await this.findUser(id);
+    this.assertCanManageRole(actor, target.role);
+    return this.updateUser(id, { email });
+  }
+
+  async adminUpdateRole(actor: { userId: string; role: AppRole }, id: string, role: AppRole) {
+    const target = await this.findUser(id);
+    this.assertCanManageRole(actor, target.role);
+    this.assertCanManageRole(actor, role);
+    if (actor.userId === id && role !== actor.role) {
+      throw new AppError(400, "Você não pode alterar o próprio perfil.");
+    }
+    return this.updateUser(id, { role });
+  }
+
+  async adminResetPassword(actor: { role: AppRole }, id: string, newPassword: string) {
+    const target = await this.findUser(id);
+    this.assertCanManageRole(actor, target.role);
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+    return { id };
+  }
+
+  async adminDeleteUser(actor: { userId: string; role: AppRole }, id: string) {
+    if (actor.userId === id) {
+      throw new AppError(400, "Você não pode excluir a própria conta.");
+    }
+    const target = await this.findUser(id);
+    this.assertCanManageRole(actor, target.role);
+    return this.deleteUser(id);
   }
 
   /**
@@ -232,14 +340,7 @@ export class UserService {
       },
     });
 
-    const { passwordHash, ...safeUser } = updated;
-    return {
-      ...safeUser,
-      regional_ids: updated.regionals.map((r) => r.regionalId),
-      regionals: updated.regionals.map((r) => r.regional),
-      contract_ids: updated.contracts.map((c) => c.contractId),
-      contracts: updated.contracts.map((c) => c.contract),
-    };
+    return formatUser(updated);
   }
 
   /**

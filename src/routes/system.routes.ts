@@ -9,6 +9,12 @@ import {
   toggleSystemModuleSchema,
   createSystemModuleCategorySchema,
   updateSystemModuleCategorySchema,
+  adminCreateUserSchema,
+  adminTargetUserSchema,
+  adminResetPasswordSchema,
+  adminUpdateProfileSchema,
+  adminUpdateEmailSchema,
+  adminUpdateRoleSchema,
 } from "../schemas/system.schema.js";
 
 const router = Router();
@@ -55,6 +61,28 @@ router.patch("/module-categories/:id", superAdmin, validate(updateSystemModuleCa
 );
 router.delete("/module-categories/:id", superAdmin, (req, res, next) =>
   systemController.deleteModuleCategory(req, res, next),
+);
+
+// Ações administrativas sobre usuários (tela de usuários). Mesmos perfis das rotas de /users:
+// admin e super_admin gerenciam; só super_admin exclui.
+const userAdmins = authorize(["super_admin", "admin"]);
+router.post("/admin-actions/create-user", userAdmins, validate(adminCreateUserSchema), (req, res, next) =>
+  systemController.adminCreateUser(req, res, next),
+);
+router.post("/admin-actions/delete-user", superAdmin, validate(adminTargetUserSchema), (req, res, next) =>
+  systemController.adminDeleteUser(req, res, next),
+);
+router.post("/admin-actions/reset-password", userAdmins, validate(adminResetPasswordSchema), (req, res, next) =>
+  systemController.adminResetPassword(req, res, next),
+);
+router.post("/admin-actions/update-profile", userAdmins, validate(adminUpdateProfileSchema), (req, res, next) =>
+  systemController.adminUpdateProfile(req, res, next),
+);
+router.post("/admin-actions/update-email", userAdmins, validate(adminUpdateEmailSchema), (req, res, next) =>
+  systemController.adminUpdateEmail(req, res, next),
+);
+router.post("/admin-actions/update-role", userAdmins, validate(adminUpdateRoleSchema), (req, res, next) =>
+  systemController.adminUpdateRole(req, res, next),
 );
 
 // Presença de usuários
