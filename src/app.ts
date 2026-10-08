@@ -29,9 +29,21 @@ app.use(metricsCollector);
 app.use(requestLogger);
 
 // 4. CORS Empresarial
+const allowedOrigins = (env.CORS_ORIGIN || "").split(",").map((o) => o.trim());
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","),
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        env.CORS_ORIGIN === "*" ||
+        allowedOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+      callback(new Error(`Origem ${origin} não permitida por CORS`));
+    },
     credentials: true,
   })
 );
