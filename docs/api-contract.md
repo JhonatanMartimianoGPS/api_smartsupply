@@ -43,7 +43,7 @@ Não existem no Prisma, então ficam em camelCase e **precisam estar listados ab
 | Presença | `/system/presence/*` | API ok; front migrar |
 | Perfis de acesso, IA, governança | `/system/roles`, `/system/ai/*`, `/system/governance/*` | sem backend ainda |
 | Dashboard | `/dashboard/*` | API ok; front migrar (`totalValue` → `totalSpent`, etc.) |
-| Solicitações | `/solicitations` | API ok; front a conferir |
+| Solicitações | `/solicitations` | migrar: a API emite os dois nomes (`solicitation_items`, `created_at`, `user_profile`, `unit_price`), transitório |
 | Chamados | `/tickets/*` | migrar (campos duplicados) |
 | Mural | `/feed/*` | migrar |
 | Fornecedores | `/suppliers` | migrar |

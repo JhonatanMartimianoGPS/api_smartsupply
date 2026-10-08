@@ -27,6 +27,84 @@ const optionalText = (value: unknown, field: string, max = MAX_TEXT) => {
   return value;
 };
 
+// Tudo que as telas de solicitação leem (lista, detalhe, modal do assistente)
+const SOLICITATION_INCLUDE = {
+  contract: { include: { regional: true } },
+  createdBy: { select: { id: true, name: true, email: true } },
+  items: {
+    include: {
+      product: { include: { category: { select: { name: true } }, supplier: { select: { name: true } } } },
+    },
+  },
+} as const;
+
+const HISTORY_INCLUDE = { user: { select: { name: true } } } as const;
+
+// Transitório: o frontend ainda lê os nomes do Supabase (solicitation_items, created_at, user_profile,
+// unit_price, product.valor_unitario). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
+function formatItem(it: any) {
+  const unitPrice = Number(it.unitPrice);
+  const product = it.product
+    ? {
+        id: it.product.id,
+        name: it.product.name,
+        codigo: it.product.codigo,
+        unidade: it.product.unidade,
+        valor_unitario: Number(it.product.tabela),
+        fornecedor: it.product.supplier?.name ?? null,
+        categoria: it.product.category?.name ?? null,
+      }
+    : null;
+  return {
+    ...it,
+    product,
+    product_id: it.productId,
+    solicitation_id: it.solicitationId,
+    unitPrice,
+    unit_price: unitPrice,
+    total: Math.round(unitPrice * it.quantity * 100) / 100,
+    created_at: it.createdAt?.toISOString?.() ?? it.createdAt,
+  };
+}
+
+function formatHistory(h: any) {
+  return {
+    ...h,
+    solicitation_id: h.solicitationId,
+    user_id: h.userId,
+    to_step: h.step,
+    details: h.notes,
+    created_at: h.createdAt?.toISOString?.() ?? h.createdAt,
+    user_profile: { full_name: h.user?.name ?? "Usuário" },
+  };
+}
+
+function formatSolicitation(s: any) {
+  const items = (s.items ?? []).map(formatItem);
+  const totalAmount = Number(s.totalAmount);
+  return {
+    ...s,
+    contract_id: s.contractId,
+    user_id: s.createdById,
+    user_profile: s.createdBy ? { full_name: s.createdBy.name } : null,
+    contract: s.contract
+      ? {
+          ...s.contract,
+          regional_id: s.contract.regionalId,
+          regional_name: s.contract.regional?.name ?? null,
+          allow_custom_prices: s.contract.allowCustomPrices,
+        }
+      : null,
+    totalAmount,
+    total_amount: totalAmount,
+    items,
+    solicitation_items: items,
+    history: s.history ? s.history.map(formatHistory) : undefined,
+    created_at: s.createdAt?.toISOString?.() ?? s.createdAt,
+    updated_at: s.updatedAt?.toISOString?.() ?? s.updatedAt,
+  };
+}
+
 export class SolicitationService {
   /**
    * Escopo de leitura (no Supabase eram as policies de SELECT):
@@ -104,32 +182,24 @@ export class SolicitationService {
     if (params?.contractId) where.AND.push({ contractId: params.contractId });
     if (params?.status) where.AND.push({ status: params.status });
 
-    return prisma.solicitation.findMany({
+    const solicitations = await prisma.solicitation.findMany({
       where,
-      include: {
-        contract: { include: { regional: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        items: { include: { product: true } },
-      },
+      include: SOLICITATION_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
+    return solicitations.map(formatSolicitation);
   }
 
   async getSolicitationById(user: AccessUser, id: string) {
     const s = await prisma.solicitation.findFirst({
       where: { AND: [{ id }, this.scope(user)] },
-      include: {
-        contract: { include: { regional: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        items: { include: { product: true } },
-        history: { orderBy: { createdAt: "desc" } },
-      },
+      include: { ...SOLICITATION_INCLUDE, history: { include: HISTORY_INCLUDE, orderBy: { createdAt: "desc" } } },
     });
 
     if (!s) {
       throw new AppError(404, "Solicitação não encontrada.");
     }
-    return s;
+    return formatSolicitation(s);
   }
 
   async createSolicitation(
@@ -175,10 +245,7 @@ export class SolicitationService {
           },
         },
       },
-      include: {
-        contract: true,
-        items: true,
-      },
+      include: SOLICITATION_INCLUDE,
     });
 
     await notificationService.solicitationCreated({
@@ -186,7 +253,7 @@ export class SolicitationService {
       contract: solicitation.contract,
       actorId: userId,
     });
-    return solicitation;
+    return formatSolicitation(solicitation);
   }
 
   async updateItems(user: AccessUser, id: string, itemsInput: unknown) {
@@ -220,7 +287,11 @@ export class SolicitationService {
       }
       await tx.solicitationItem.deleteMany({ where: { solicitationId: id } });
       await tx.solicitationItem.createMany({ data: itemsToCreate });
-      return tx.solicitationItem.findMany({ where: { solicitationId: id } });
+      const saved = await tx.solicitationItem.findMany({
+        where: { solicitationId: id },
+        include: SOLICITATION_INCLUDE.items.include,
+      });
+      return saved.map(formatItem);
     });
   }
 
@@ -264,7 +335,7 @@ export class SolicitationService {
           notes,
         },
       });
-      return tx.solicitation.findUniqueOrThrow({ where: { id }, include: { contract: true, items: true } });
+      return tx.solicitation.findUniqueOrThrow({ where: { id }, include: SOLICITATION_INCLUDE });
     });
 
     // Avisa quem criou a solicitação quando o status ou a etapa mudou
@@ -278,7 +349,7 @@ export class SolicitationService {
       });
     }
 
-    return updated;
+    return formatSolicitation(updated);
   }
 
   async revertStep(
@@ -314,10 +385,12 @@ export class SolicitationService {
 
   async getHistory(user: AccessUser, id: string) {
     await this.findAccessible(user, id);
-    return prisma.solicitationHistory.findMany({
+    const history = await prisma.solicitationHistory.findMany({
       where: { solicitationId: id },
+      include: HISTORY_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
+    return history.map(formatHistory);
   }
 
   async addHistory(
@@ -331,7 +404,7 @@ export class SolicitationService {
     }
     const notes = optionalText(data.notes, "Observação") ?? optionalText(data.details, "Observação");
     const step = optionalText(data.toStep, "Etapa", 100);
-    return prisma.solicitationHistory.create({
+    const entry = await prisma.solicitationHistory.create({
       data: {
         solicitationId: id,
         userId: user.userId,
@@ -340,7 +413,9 @@ export class SolicitationService {
         step,
         notes,
       },
+      include: HISTORY_INCLUDE,
     });
+    return formatHistory(entry);
   }
 }
 
