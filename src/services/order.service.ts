@@ -4,7 +4,57 @@ import type { Contract, OrderStatus, Prisma } from "@prisma/client";
 import { auditService } from "./audit.service.js";
 import { accessService, type AccessUser } from "./access.service.js";
 
+// Pedido "ativo": ocupa a competência do contrato. Rejeitado e cancelado liberam o mês.
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["pendente", "aprovado", "entregue"];
+
 export class OrderService {
+  /**
+   * Um contrato só pode ter um pedido mensal ativo por competência (regra herdada do gatilho
+   * prevent_active_contract_order_conflicts do Supabase). Pedidos extras e contratos de orçamento
+   * ilimitado ficam de fora.
+   *
+   * O lock de transação (por contrato e mês) faz pedidos simultâneos esperarem um pelo outro:
+   * sem ele, duas criações ao mesmo tempo passariam pela checagem e gerariam duplicidade.
+   * Por isso a checagem precisa rodar dentro da mesma transação que grava o pedido.
+   * Não use isolationLevel RepeatableRead/Serializable aqui: a checagem não enxergaria o pedido
+   * que o outro acabou de gravar (o padrão READ COMMITTED é o que faz o lock funcionar).
+   * Qualquer novo ponto que crie ou reative pedido mensal precisa passar por este método.
+   */
+  private async assertNoActiveMonthlyOrder(
+    tx: Prisma.TransactionClient,
+    contract: Pick<Contract, "id" | "unlimitedBudget">,
+    actorId: string,
+    ano: number,
+    mes: number,
+    ignoreOrderId?: string,
+  ) {
+    if (contract.unlimitedBudget) return;
+
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order:${contract.id}:${ano}-${mes}`}))`;
+
+    const conflict = await tx.order.findFirst({
+      where: {
+        contractId: contract.id,
+        ano,
+        mes,
+        isExtraOrder: false,
+        status: { in: ACTIVE_ORDER_STATUSES },
+        ...(ignoreOrderId ? { id: { not: ignoreOrderId } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { createdById: true, createdBy: { select: { name: true } } },
+    });
+    if (!conflict) return;
+
+    const message =
+      conflict.createdById === actorId
+        ? "Você já possui um pedido ativo para este contrato neste mês."
+        : conflict.createdBy?.name
+          ? `${conflict.createdBy.name} já realizou o pedido deste contrato neste mês.`
+          : "Já existe um pedido ativo para este contrato neste mês.";
+    throw new AppError(409, message);
+  }
+
   /**
    * Valida e prepara os itens de um pedido (regras da antiga função create_order_with_items):
    * - linhas repetidas do mesmo produto são somadas
@@ -357,33 +407,37 @@ export class OrderService {
       "Este contrato está com o orçamento bloqueado. Remova itens para ficar dentro do saldo disponível antes de enviar o pedido.",
     );
 
-    const order = await prisma.order.create({
-      data: {
-        contractId,
-        createdById: userId,
-        status: "pendente",
-        mes,
-        ano,
-        isExtraOrder: false,
-        notes: data.notes,
-        totalAmount,
-        items: {
-          create: itemsToCreate,
-        },
-        history: {
-          create: {
-            userId,
-            action: "Criação do Pedido Mensal",
-            details: `Pedido mensal criado com ${itemsToCreate.length} itens. Total: R$ ${totalAmount.toFixed(2)}`,
-            newStatus: "pendente",
+    const order = await prisma.$transaction(async (tx) => {
+      await this.assertNoActiveMonthlyOrder(tx, contract, userId, ano, mes);
+
+      return tx.order.create({
+        data: {
+          contractId,
+          createdById: userId,
+          status: "pendente",
+          mes,
+          ano,
+          isExtraOrder: false,
+          notes: data.notes,
+          totalAmount,
+          items: {
+            create: itemsToCreate,
+          },
+          history: {
+            create: {
+              userId,
+              action: "Criação do Pedido Mensal",
+              details: `Pedido mensal criado com ${itemsToCreate.length} itens. Total: R$ ${totalAmount.toFixed(2)}`,
+              newStatus: "pendente",
+            },
           },
         },
-      },
-      include: {
-        contract: { include: { regional: true, category: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        items: true,
-      },
+        include: {
+          contract: { include: { regional: true, category: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+          items: true,
+        },
+      });
     });
 
     return this.formatOrder(order);
@@ -501,6 +555,14 @@ export class OrderService {
 
     // Transação atômica ACID: se qualquer etapa falhar, reverte todas
     const updated = await prisma.$transaction(async (tx) => {
+      // 0. Um pedido mensal que volta a ficar ativo (ex.: rejeitado -> pendente) não pode duplicar a
+      // competência do contrato. Aprovar ou entregar não é checado: o pedido já ocupava o mês.
+      // (O gatilho original também checava ativo -> ativo; aqui isso só serializaria à toa e
+      // bloquearia aprovações por duplicidades antigas.)
+      if (!order.isExtraOrder && ACTIVE_ORDER_STATUSES.includes(newStatus) && !ACTIVE_ORDER_STATUSES.includes(oldStatus)) {
+        await this.assertNoActiveMonthlyOrder(tx, order.contract, userId, order.ano, order.mes, orderId);
+      }
+
       // 1. Troca o status só se ele ainda for o que lemos. Sem isso, dois cliques simultâneos
       // aprovariam duas vezes e debitariam o orçamento duas vezes.
       const changed = await tx.order.updateMany({
