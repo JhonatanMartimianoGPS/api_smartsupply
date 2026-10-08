@@ -59,11 +59,15 @@ Padrão do código (copie de `regional.*`):
 - Rotas de escrita devem ter `authorize([...])`. Toda rota de `DELETE`/`PUT`/`PATCH` sobre dado de um dono precisa **checar perfil e escopo** (veja Acesso abaixo).
 - Nunca retorne campos sensíveis (`passwordHash`): use `select`.
 
-## Formato da API (convenção atual)
+## Formato da API (contrato)
 
-- O body costuma entrar em **camelCase** e as respostas saem em **snake_case** (`valor_unitario`, `regional_id`), por compatibilidade com o frontend herdado do Supabase.
+A regra completa e a situação de cada recurso estão em `docs/api-contract.md`. Resumo:
+
+- O nome do campo no JSON é o nome do campo no **modelo Prisma, em camelCase**, na resposta e no corpo (`avatarUrl`, `regionalId`).
+- **Não crie campo duplicado** (`regionalId` e `regional_id` juntos) e não renomeie campo sem atualizar o tipo no `client_smartsupply` no mesmo dia: não há erro de tipo entre os dois repositórios.
+- Exceção: `/stock/*` segue em snake_case (modelo do WMS).
+- A regra vale para código novo. Recursos marcados como `migrar` em `docs/api-contract.md` emitem formato antigo e serão migrados aos poucos; só migre um recurso existente se isso for o pedido, para não ampliar o escopo.
 - O frontend ainda envia alguns formatos antigos (por exemplo, produto como `{ product: {...}, categoryIds }`). Quando for assim, traduza no controller e marque como **transitório**.
-- A convenção definitiva de nomes ainda será alinhada com o time. Não renomeie campos de resposta por conta própria: o frontend quebra sem aviso, porque não há erro de tipo entre os dois repositórios.
 
 ## Regras de negócio e acesso (no lugar de RLS e triggers)
 
