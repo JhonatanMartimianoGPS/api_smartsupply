@@ -1980,6 +1980,41 @@ async function main() {
     console.log(`✅ [Seed] Ativo patrimonial cadastrado com fluxo de vida útil (ID: ${itemPatrimonio.id}).`);
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // CONSUMO DO ORÇAMENTO POR CATEGORIA (recalculado dos pedidos aprovados e entregues)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Os itens guardam a categoria do produto no momento do pedido; aqui preenchemos os que não têm
+  await prisma.$executeRaw`
+    UPDATE order_items oi SET product_category_id_snapshot = p.category_id
+    FROM products p WHERE p.id = oi.product_id AND oi.product_category_id_snapshot IS NULL`;
+  // Garante o período de cada suborçamento nos meses que têm pedido aprovado ou entregue
+  await prisma.$executeRaw`
+    INSERT INTO contract_product_category_budget_periods
+      (id, contract_product_category_budget_id, contract_id, period_month, monthly_budget, used_budget, created_at, updated_at)
+    SELECT gen_random_uuid()::text, b.id, b.contract_id, m.period_month, b.monthly_budget, 0, now(), now()
+    FROM contract_product_category_budgets b
+    JOIN (
+      SELECT DISTINCT contract_id, to_char(make_date(ano, mes, 1), 'YYYY-MM') AS period_month
+      FROM orders WHERE status IN ('aprovado', 'entregue')
+    ) m ON m.contract_id = b.contract_id
+    ON CONFLICT (contract_product_category_budget_id, period_month) DO NOTHING`;
+  // Consumo = quantidade x preço dos itens aprovados/entregues da categoria no mês
+  await prisma.$executeRaw`
+    UPDATE contract_product_category_budget_periods p
+    SET used_budget = COALESCE((
+          SELECT SUM(oi.quantity * oi.unit_price)
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          WHERE o.contract_id = p.contract_id
+            AND to_char(make_date(o.ano, o.mes, 1), 'YYYY-MM') = p.period_month
+            AND o.status IN ('aprovado', 'entregue')
+            AND oi.product_category_id_snapshot = b.product_category_id
+        ), 0),
+        updated_at = now()
+    FROM contract_product_category_budgets b
+    WHERE b.id = p.contract_product_category_budget_id`;
+  console.log("✅ [Seed] Consumo do orçamento por categoria recalculado.");
+
   console.log("🎉 [Seed Rico] Carga completa e enriquecida finalizada com sucesso!");
 }
 

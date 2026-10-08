@@ -9,6 +9,128 @@ const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["pendente", "aprovado", "entregue"
 
 export class OrderService {
   /**
+   * Suborçamento por categoria de produto (regra herdada das antigas funções create_order_with_items
+   * e update_order_items_with_validation): para cada categoria do pedido que tem suborçamento ativo
+   * no contrato, consumo do mês + valor pedido não pode passar do limite.
+   * - contratos de orçamento ilimitado não são verificados
+   * - `onlyWhenLocked`: o pedido extra só é verificado quando o contrato está com o orçamento bloqueado
+   * Como o consumo só entra na aprovação, esta checagem é um aviso antecipado (mesma premissa do
+   * assertBudgetAllows).
+   * Duas decisões conscientes (o Supabase validava sempre, na edição de itens): contrato de orçamento
+   * ilimitado também fica isento na edição, e a edição de pedido extra segue a regra da criação do extra.
+   */
+  private async assertCategoryBudgetsAllow(
+    contract: Pick<Contract, "id" | "unlimitedBudget" | "budgetLocked">,
+    ano: number,
+    mes: number,
+    items: Prisma.OrderItemCreateManyOrderInput[],
+    onlyWhenLocked: boolean,
+    messageEnd: string,
+  ) {
+    if (contract.unlimitedBudget) return;
+    const periodMonth = `${ano}-${String(mes).padStart(2, "0")}`;
+
+    if (onlyWhenLocked) {
+      const contractPeriod = await prisma.contractBudgetPeriod.findUnique({
+        where: { contractId_periodMonth: { contractId: contract.id, periodMonth } },
+      });
+      if (!(contractPeriod?.budgetLocked ?? contract.budgetLocked)) return;
+    }
+
+    // Valor pedido por categoria (o mesmo valor que o consumo usa: quantidade x preço do item)
+    const requested = new Map<string, number>();
+    for (const item of items) {
+      const categoryId = item.productCategoryIdSnapshot;
+      if (!categoryId) continue;
+      requested.set(categoryId, (requested.get(categoryId) ?? 0) + Number(item.unitPrice) * Number(item.quantity));
+    }
+    if (requested.size === 0) return;
+
+    const budgets = await prisma.contractProductCategoryBudget.findMany({
+      where: { contractId: contract.id, active: true, productCategoryId: { in: [...requested.keys()] } },
+      select: {
+        productCategoryId: true,
+        monthlyBudget: true,
+        productCategory: { select: { name: true } },
+        periods: { where: { periodMonth }, select: { monthlyBudget: true, usedBudget: true } },
+      },
+    });
+
+    const exceeded = budgets
+      .map((budget) => {
+        const period = budget.periods[0];
+        const limit = Number(period ? period.monthlyBudget : budget.monthlyBudget);
+        const used = period ? Number(period.usedBudget) : 0;
+        const over = used + (requested.get(budget.productCategoryId) ?? 0) - limit;
+        return { name: budget.productCategory.name.trim() || "Categoria sem nome", over };
+      })
+      .filter((c) => c.over > 0.005)
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    if (exceeded.length === 0) return;
+
+    const shown = exceeded
+      .slice(0, 5)
+      .map((c) => `${c.name} (excedido em R$ ${c.over.toFixed(2).replace(".", ",")})`)
+      .join("; ");
+    const more = exceeded.length > 5 ? ` e mais ${exceeded.length - 5} categoria(s)` : "";
+    throw new AppError(400, `Suborçamento excedido para as categorias: ${shown}${more}. ${messageEnd}`);
+  }
+
+  /**
+   * Recalcula o consumo por categoria de produto de um contrato numa competência: soma de
+   * quantidade x preço dos itens dos pedidos aprovados e entregues, agrupada pela categoria
+   * gravada no item. É um recálculo (e não um incremento), então repetir é seguro. Roda dentro da
+   * mesma transação que muda o status do pedido, ao lado do débito do orçamento total.
+   *
+   * O lock (por contrato e mês) faz duas aprovações simultâneas esperarem uma pela outra: a segunda
+   * soma depois do commit da primeira. Sem ele, cada uma somaria só o próprio pedido e a última a
+   * gravar apagaria o consumo da outra (e dois upserts poderiam tentar criar o mesmo período).
+   * Deve ser chamado depois de mudar o status do pedido, na mesma transação.
+   */
+  private async recalculateCategoryBudgets(tx: Prisma.TransactionClient, contractId: string, ano: number, mes: number) {
+    const periodMonth = `${ano}-${String(mes).padStart(2, "0")}`;
+
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`catbudget:${contractId}:${periodMonth}`}))`;
+
+    // Todos os suborçamentos do contrato, inclusive os inativos: o consumo fica registrado igual
+    const budgets = await tx.contractProductCategoryBudget.findMany({
+      where: { contractId },
+      select: { id: true, productCategoryId: true, monthlyBudget: true },
+    });
+    if (budgets.length === 0) return;
+
+    const sums = await tx.$queryRaw<Array<{ category_id: string; total: unknown }>>`
+      SELECT oi.product_category_id_snapshot AS category_id, SUM(oi.quantity * oi.unit_price) AS total
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE o.contract_id = ${contractId}
+        AND o.ano = ${ano}
+        AND o.mes = ${mes}
+        AND o.status IN ('aprovado', 'entregue')
+        AND oi.product_category_id_snapshot IS NOT NULL
+      GROUP BY oi.product_category_id_snapshot`;
+    const usedByCategory = new Map(sums.map((row) => [row.category_id, Number(row.total)]));
+
+    for (const budget of budgets) {
+      const used = usedByCategory.get(budget.productCategoryId) ?? 0;
+      await tx.contractProductCategoryBudgetPeriod.upsert({
+        where: {
+          contractProductCategoryBudgetId_periodMonth: { contractProductCategoryBudgetId: budget.id, periodMonth },
+        },
+        create: {
+          contractProductCategoryBudgetId: budget.id,
+          contractId,
+          periodMonth,
+          monthlyBudget: budget.monthlyBudget,
+          usedBudget: used,
+        },
+        // O limite do período acompanha o do suborçamento (como o recalculate original do Supabase)
+        update: { monthlyBudget: budget.monthlyBudget, usedBudget: used },
+      });
+    }
+  }
+
+  /**
    * Um contrato só pode ter um pedido mensal ativo por competência (regra herdada do gatilho
    * prevent_active_contract_order_conflicts do Supabase). Pedidos extras e contratos de orçamento
    * ilimitado ficam de fora.
@@ -106,8 +228,15 @@ export class OrderService {
     const itemsToCreate: Prisma.OrderItemCreateManyOrderInput[] = [];
     for (const [productId, wantedItem] of wanted) {
       const prod = productById.get(productId)!;
+      // O orçamento por categoria precisa saber a categoria de cada item
+      if (!prod.categoryId) {
+        throw new AppError(400, "Produto do item não possui categoria de produto válida.");
+      }
+      // Duas casas, como a coluna do banco: o total e o consumo por categoria somam o valor gravado
       const unitPrice =
-        contract.allowCustomPrices && wantedItem.customPrice !== undefined ? wantedItem.customPrice : Number(prod.tabela);
+        Math.round(
+          (contract.allowCustomPrices && wantedItem.customPrice !== undefined ? wantedItem.customPrice : Number(prod.tabela)) * 100,
+        ) / 100;
 
       totalAmount += unitPrice * wantedItem.quantity;
       itemsToCreate.push({
@@ -118,6 +247,7 @@ export class OrderService {
         productCodigoSnapshot: prod.codigo,
         productUnidadeSnapshot: prod.unidade,
         productCategoriaSnapshot: prod.category?.name,
+        productCategoryIdSnapshot: prod.categoryId,
         productFornecedorSnapshot: prod.supplier?.tradeName || prod.supplier?.name,
         productTabelaSnapshot: prod.tabela,
         productImageUrlSnapshot: prod.imageUrl,
@@ -406,6 +536,7 @@ export class OrderService {
       totalAmount,
       "Este contrato está com o orçamento bloqueado. Remova itens para ficar dentro do saldo disponível antes de enviar o pedido.",
     );
+    await this.assertCategoryBudgetsAllow(contract, ano, mes, itemsToCreate, false, "Ajuste os itens antes de enviar o pedido.");
 
     const order = await prisma.$transaction(async (tx) => {
       await this.assertNoActiveMonthlyOrder(tx, contract, userId, ano, mes);
@@ -487,6 +618,7 @@ export class OrderService {
       totalAmount,
       "Este contrato está com o orçamento bloqueado. O pedido extra excede o saldo disponível da competência.",
     );
+    await this.assertCategoryBudgetsAllow(contract, ano, mes, itemsToCreate, true, "Ajuste os itens antes de enviar o pedido.");
 
     const order = await prisma.order.create({
       data: {
@@ -646,6 +778,11 @@ export class OrderService {
         });
       }
 
+      // O consumo por categoria também muda quando o pedido entra ou sai de aprovado/entregue
+      if (wasDebited !== willDebit) {
+        await this.recalculateCategoryBudgets(tx, order.contractId, order.ano, order.mes);
+      }
+
       return res;
     });
 
@@ -737,7 +874,7 @@ export class OrderService {
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, contract: accessService.contractFilter(user) },
-      select: { id: true, status: true, ano: true, mes: true, contract: true },
+      select: { id: true, status: true, ano: true, mes: true, isExtraOrder: true, contract: true },
     });
     if (!order) {
       throw new AppError(404, "Pedido não encontrado.");
@@ -753,6 +890,14 @@ export class OrderService {
       order.mes,
       newTotal,
       "Este contrato está com o orçamento bloqueado. Remova itens para ficar dentro do saldo disponível antes de salvar as alterações.",
+    );
+    await this.assertCategoryBudgetsAllow(
+      order.contract,
+      order.ano,
+      order.mes,
+      itemsToCreate,
+      order.isExtraOrder,
+      "Ajuste os itens antes de salvar as alterações.",
     );
 
     // Remove os itens antigos e recria: tudo junto, para não perder os itens se algo falhar.
