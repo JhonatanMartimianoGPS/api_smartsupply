@@ -1,0 +1,1007 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AppRole {
+  super_admin
+  admin
+  gestor
+  suprimentos
+  assistente
+  colaborador
+}
+
+enum OrderStatus {
+  pendente
+  aprovado
+  rejeitado
+  entregue
+  cancelado
+}
+
+enum TicketStatus {
+  aberto
+  em_atendimento
+  fluxo_definido
+  aguardando_terceiro
+  concluido
+  cancelado
+}
+
+enum TicketPriority {
+  baixa
+  media
+  alta
+  critica
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. USUÁRIOS & REGIONAIS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         AppRole   @default(colaborador)
+  department   String?
+  cargo        String?
+  phone        String?
+  avatarUrl    String?   @map("avatar_url")
+  taxId        String?   @map("tax_id")
+  externalKey  String?   @map("external_key")
+  externalIntegrationEnabled Boolean @default(false) @map("external_integration_enabled")
+  isActive     Boolean   @default(true) @map("is_active")
+  isBlocked    Boolean   @default(false) @map("is_blocked")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relacionamentos
+  regionals      UserRegional[]
+  contracts      UserContract[]
+  teamMembers    TeamMember[]
+  createdOrders  Order[]              @relation("OrderCreatedBy")
+  ticketsCreated ServiceTicket[]      @relation("TicketCreatedBy")
+  ticketsAssigned ServiceTicket[]     @relation("TicketAssignedTo")
+  ticketMessages TicketMessage[]
+  feedPosts      FeedPost[]
+  feedComments   FeedComment[]
+  feedLikes      FeedLike[]
+  notifications  AppNotification[]
+  presences      UserPresence[]
+  solicitations  Solicitation[]       @relation("SolicitationCreatedBy")
+  solicitationHistory SolicitationHistory[]
+  stockEntradasRegistradas StockEntrada[] @relation("StockEntradaRegistradoPor")
+  stockSaidasRegistradas StockSaida[] @relation("StockSaidaRegistradoPor")
+  stockSaidasRetiradas StockSaida[] @relation("StockSaidaRetiradoPor")
+  stockPatrimoniosResponsavel StockPatrimonioItem[] @relation("StockPatrimonioResponsavel")
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model Regional {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  externalKey String?  @map("external_key")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users              UserRegional[]
+  contracts          Contract[]
+  contractCategories ContractCategory[]
+  products           Product[]
+  tickets            ServiceTicket[]
+  suppliers          SupplierRegional[]
+  teamMembers        TeamMember[]
+  stockGrupos        StockGrupo[]
+  stockCentros       StockCentroDistribuicao[]
+
+  @@map("regionals")
+}
+
+model UserRegional {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  regionalId String   @map("regional_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  regional Regional @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, regionalId])
+  @@map("user_regionals")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. CONTRATOS, CATEGORIAS & ORÇAMENTOS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ContractCategory {
+  id          String   @id @default(uuid())
+  name        String
+  color       String?  @default("#3B82F6")
+  regionalId  String?  @map("regional_id")
+  active      Boolean  @default(true)
+  externalKey String?  @map("external_key")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  regional  Regional?  @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  contracts Contract[]
+  productCategoryLinks ContractCategoryProductCategoryLink[]
+
+  @@map("contract_categories")
+}
+
+model Contract {
+  id                             String   @id @default(uuid())
+  name                           String
+  code                           String?
+  regionalId                     String   @map("regional_id")
+  categoryId                     String?  @map("category_id")
+  totalBudget                    Decimal  @default(0) @map("total_budget") @db.Decimal(12, 2)
+  usedBudget                     Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  unlimitedBudget                Boolean  @default(false) @map("unlimited_budget")
+  allowExtraOrder                Boolean  @default(true) @map("allow_extra_order")
+  allowCustomPrices              Boolean  @default(false) @map("allow_custom_prices")
+  allowUnlimitedItemsSolicitation Boolean  @default(false) @map("allow_unlimited_items_solicitation")
+  maxItemsPerSolicitation        Int?     @map("max_items_per_solicitation")
+  budgetLocked                   Boolean  @default(false) @map("budget_locked")
+  active                         Boolean  @default(true)
+  externalKey                    String?  @map("external_key")
+  createdAt                      DateTime @default(now()) @map("created_at")
+  updatedAt                      DateTime @updatedAt @map("updated_at")
+
+  regional               Regional                        @relation(fields: [regionalId], references: [id], onDelete: Restrict)
+  category               ContractCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  users                  UserContract[]
+  orders                 Order[]
+  tickets                ServiceTicket[]
+  budgetPeriods          ContractBudgetPeriod[]
+  productCategoryBudgets ContractProductCategoryBudget[]
+  solicitations          Solicitation[]
+  stockGrupos            StockGrupo[]
+  stockCentros           StockCentroDistribuicao[]
+
+  @@map("contracts")
+}
+
+model UserContract {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  contractId String   @map("contract_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contractId])
+  @@map("user_contracts")
+}
+
+model ContractBudgetPeriod {
+  id            String   @id @default(uuid())
+  contractId    String   @map("contract_id")
+  periodMonth   String   @map("period_month") // YYYY-MM
+  monthlyBudget Decimal  @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  usedBudget    Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  budgetLocked  Boolean  @default(false) @map("budget_locked")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, periodMonth])
+  @@map("contract_budget_periods")
+}
+
+model ContractProductCategoryBudget {
+  id                String    @id @default(uuid())
+  contractId        String    @map("contract_id")
+  productCategoryId String    @map("product_category_id")
+  monthlyBudget     Decimal   @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  active            Boolean   @default(true)
+  deactivatedAt     DateTime? @map("deactivated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  contract        Contract                            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  productCategory ProductCategory                     @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+  periods         ContractProductCategoryBudgetPeriod[]
+
+  @@unique([contractId, productCategoryId])
+  @@map("contract_product_category_budgets")
+}
+
+model ContractProductCategoryBudgetPeriod {
+  id                               String   @id @default(uuid())
+  contractProductCategoryBudgetId  String   @map("contract_product_category_budget_id")
+  contractId                       String   @map("contract_id")
+  periodMonth                      String   @map("period_month") // YYYY-MM
+  monthlyBudget                    Decimal  @default(0) @map("monthly_budget") @db.Decimal(12, 2)
+  usedBudget                       Decimal  @default(0) @map("used_budget") @db.Decimal(12, 2)
+  createdAt                        DateTime @default(now()) @map("created_at")
+  updatedAt                        DateTime @updatedAt @map("updated_at")
+
+  budget ContractProductCategoryBudget @relation(fields: [contractProductCategoryBudgetId], references: [id], onDelete: Cascade)
+
+  @@unique([contractProductCategoryBudgetId, periodMonth])
+  @@map("contract_product_category_budget_periods")
+}
+
+model ContractCategoryProductCategoryLink {
+  id                 String   @id @default(uuid())
+  contractCategoryId String   @map("contract_category_id")
+  productCategoryId  String   @map("product_category_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  contractCategory ContractCategory @relation(fields: [contractCategoryId], references: [id], onDelete: Cascade)
+  productCategory  ProductCategory  @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([contractCategoryId, productCategoryId])
+  @@map("contract_category_product_category_links")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. CATÁLOGO DE PRODUTOS & FORNECEDORES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?  @unique
+  icon        String?
+  description String?
+  externalKey String?  @map("external_key")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products              Product[]
+  contractBudgets       ContractProductCategoryBudget[]
+  contractCategoryLinks ContractCategoryProductCategoryLink[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  codigo     String?
+  descricao  String?
+  unidade    String   @default("UN")
+  tabela     Decimal  @default(0) @db.Decimal(10, 2)
+  categoryId String?  @map("category_id")
+  regionalId String?  @map("regional_id")
+  supplierId String?  @map("supplier_id")
+  imageUrl   String?  @map("image_url")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category       ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  regional       Regional?            @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  supplier       RegisteredSupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  orderItems     OrderItem[]
+  ticketProducts TicketProduct[]
+  history        ProductHistory[]
+  solicitationItems SolicitationItem[]
+  stockProdutos  StockProduto[]
+
+  @@index([regionalId, categoryId, active])
+  @@index([codigo])
+  @@map("products")
+}
+
+model ProductHistory {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  userId    String?  @map("user_id")
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_history")
+}
+
+model RegisteredSupplier {
+  id                 String   @id @default(uuid())
+  name               String   @map("name")
+  razaoSocial        String?  @map("razao_social")
+  tradeName          String?  @map("trade_name")
+  cnpj               String?  @unique
+  email              String?
+  phone              String?
+  telefone           String?
+  contatoNome        String?  @map("contato_nome")
+  observacoes        String?
+  zipCode            String?  @map("zip_code")
+  state              String?  @map("state")
+  city               String?  @map("city")
+  neighborhood       String?  @map("neighborhood")
+  addressNumber      String?  @map("address_number")
+  addressComplement  String?  @map("address_complement")
+  externalKey        String?  @map("external_key")
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  products  Product[]
+  regionals SupplierRegional[]
+  tickets   ServiceTicket[]
+  stockEntradas StockEntrada[]
+
+  @@map("registered_suppliers")
+}
+
+model SupplierRegional {
+  id                    String   @id @default(uuid())
+  supplierId            String   @map("supplier_id")
+  regionalId            String   @map("regional_id")
+  deliveryLeadTimeDays  Int?     @map("delivery_lead_time_days")
+  minDeliveryValue      Decimal? @default(0) @map("min_delivery_value") @db.Decimal(12, 2)
+  freightValue          Decimal? @default(0) @map("freight_value") @db.Decimal(12, 2)
+  minOrderValue         Decimal? @map("min_order_value") @db.Decimal(10, 2)
+  freeShippingThreshold Decimal? @map("free_shipping_threshold") @db.Decimal(10, 2)
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  supplier RegisteredSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  regional Regional           @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, regionalId])
+  @@map("supplier_service_regionals")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. PEDIDOS, ITENS & DIVERGÊNCIAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Order {
+  id           String      @id @default(uuid())
+  contractId   String      @map("contract_id")
+  createdById  String      @map("created_by")
+  status       OrderStatus @default(pendente)
+  mes          Int
+  ano          Int
+  isExtraOrder Boolean     @default(false) @map("is_extra_order")
+  notes        String?
+  totalAmount  Decimal     @default(0) @map("total_amount") @db.Decimal(12, 2)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  contract     Contract                  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  createdBy    User                      @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items        OrderItem[]
+  history      OrderHistory[]
+  divergences  OrderDeliveryDivergence[]
+  issueReports OrderIssueReport[]
+  stockEntradas StockEntrada[]
+
+  @@index([contractId, status, createdAt])
+  @@index([status, mes, ano])
+  @@index([createdById])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                         String   @id @default(uuid())
+  orderId                    String   @map("order_id")
+  productId                  String?  @map("product_id")
+  quantity                   Int      @default(1)
+  unitPrice                  Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  productNameSnapshot        String?  @map("product_name_snapshot")
+  productCodigoSnapshot      String?  @map("product_codigo_snapshot")
+  productUnidadeSnapshot     String?  @map("product_unidade_snapshot")
+  productCategoriaSnapshot   String?  @map("product_categoria_snapshot")
+  productFornecedorSnapshot  String?  @map("product_fornecedor_snapshot")
+  productTabelaSnapshot      Decimal? @map("product_tabela_snapshot") @db.Decimal(10, 2)
+  productImageUrlSnapshot    String?  @map("product_image_url_snapshot")
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, productId])
+  @@map("order_items")
+}
+
+model OrderHistory {
+  id        String       @id @default(uuid())
+  orderId   String       @map("order_id")
+  userId    String?      @map("user_id")
+  action    String
+  details   String?
+  oldStatus OrderStatus? @map("old_status")
+  newStatus OrderStatus? @map("new_status")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_history")
+}
+
+model OrderDeliveryDivergence {
+  id           String    @id @default(uuid())
+  orderId      String    @map("order_id")
+  reportedById String    @map("reported_by_id")
+  description  String
+  status       String    @default("pendente") // pendente, resolvida
+  notes        String?
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_delivery_divergences")
+}
+
+model OrderIssueReport {
+  id           String    @id @default(uuid())
+  orderId      String    @map("order_id")
+  reportedById String    @map("reported_by_id")
+  description  String
+  status       String    @default("aberto") // aberto, em_analise, resolvido
+  notes        String?
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_issue_reports")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. SOLICITAÇÕES ESPECIAIS (FORA DE CATÁLOGO)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Solicitation {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  createdById String   @map("created_by")
+  status      String   @default("pendente") // pendente, em_analise, aprovada, rejeitada
+  step        String   @default("gestor")   // gestor, suprimentos, finalizado
+  notes       String?
+  totalAmount Decimal  @default(0) @map("total_amount") @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  contract  Contract              @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  createdBy User                  @relation("SolicitationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     SolicitationItem[]
+  history   SolicitationHistory[]
+
+  @@map("solicitations")
+}
+
+model SolicitationItem {
+  id             String   @id @default(uuid())
+  solicitationId String   @map("solicitation_id")
+  productId      String?  @map("product_id")
+  description    String?
+  quantity       Int      @default(1)
+  unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  solicitation Solicitation @relation(fields: [solicitationId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("solicitation_items")
+}
+
+model SolicitationHistory {
+  id             String   @id @default(uuid())
+  solicitationId String   @map("solicitation_id")
+  userId         String   @map("user_id")
+  action         String
+  step           String?
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  solicitation Solicitation @relation(fields: [solicitationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("solicitation_history")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. CENTRAL DE CHAMADOS DE SERVIÇOS (SERVICE TICKETS)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TicketType {
+  id        String   @id @default(uuid())
+  name      String
+  slaHours  Int      @default(48) @map("sla_hours")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tickets ServiceTicket[]
+
+  @@map("ticket_types")
+}
+
+model TicketFlow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tickets ServiceTicket[]
+
+  @@map("ticket_flows")
+}
+
+model ServiceTicket {
+  id                   String         @id @default(uuid())
+  title                String
+  description          String
+  contractId           String         @map("contract_id")
+  regionalId           String         @map("regional_id")
+  typeId               String?        @map("type_id")
+  flowId               String?        @map("flow_id")
+  supplierId           String?        @map("supplier_id")
+  supplierNameSnapshot String?        @map("supplier_name_snapshot")
+  createdById          String         @map("created_by")
+  assignedToId         String?        @map("assigned_to")
+  status               TicketStatus   @default(aberto)
+  priority             TicketPriority @default(media)
+  slaHours             Int            @default(48) @map("sla_hours")
+  finalCost            Decimal?       @map("final_cost") @db.Decimal(10, 2)
+  autoSyncCost         Boolean        @default(false) @map("auto_sync_cost")
+  resolvedAt           DateTime?      @map("resolved_at")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  contract    Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  regional    Regional            @relation(fields: [regionalId], references: [id], onDelete: Restrict)
+  type        TicketType?         @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  flow        TicketFlow?         @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  supplier    RegisteredSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy   User                @relation("TicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo  User?               @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages    TicketMessage[]
+  steps       TicketStep[]
+  attachments TicketAttachment[]
+  products    TicketProduct[]
+
+  @@index([regionalId, contractId, status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@map("service_tickets")
+}
+
+model TicketStep {
+  id          String    @id @default(uuid())
+  ticketId    String    @map("ticket_id")
+  title       String
+  completed   Boolean   @default(false)
+  order       Int       @default(0)
+  completedAt DateTime? @map("completed_at")
+  completedBy String?   @map("completed_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_steps")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  userId     String   @map("user_id")
+  message    String
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("ticket_messages")
+}
+
+model TicketAttachment {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  fileName   String   @map("file_name")
+  fileUrl    String   @map("file_url")
+  fileType   String?  @map("file_type")
+  fileSize   Int?     @map("file_size")
+  uploadedBy String?  @map("uploaded_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_attachments")
+}
+
+model TicketProduct {
+  id                  String   @id @default(uuid())
+  ticketId            String   @map("ticket_id")
+  productId           String?  @map("product_id")
+  productNameSnapshot String?  @map("product_name_snapshot")
+  quantity            Int      @default(1)
+  unitPrice           Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  ticket  ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  product Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("ticket_products")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. MURAL SOCIAL & FEED CORPORATIVO
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FeedPost {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  content   String
+  imageUrl  String?  @map("image_url")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments FeedComment[]
+  likes    FeedLike[]
+
+  @@map("feed_posts")
+}
+
+model FeedComment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feed_post_comments")
+}
+
+model FeedLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("feed_post_likes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. NOTIFICAÇÕES & GOVERNANÇA DO SISTEMA
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AppNotification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  ticketId  String?  @map("ticket_id")
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("app_notifications")
+}
+
+model SystemModule {
+  id        String   @id
+  name      String
+  category  String
+  enabled   Boolean  @default(true)
+  roles     String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_modules_config")
+}
+
+model AppConfig {
+  id                   String   @id @default("default")
+  minimumClientVersion String   @default("1.0.0") @map("minimum_client_version")
+  maintenanceMode      Boolean  @default(false) @map("maintenance_mode")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("app_config")
+}
+
+model UserPresence {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  city       String?
+  region     String?
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_presence")
+}
+
+model TeamMember {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  name       String
+  role       String
+  email      String?
+  phone      String?
+  avatarUrl  String?  @map("avatar_url")
+  regionalId String?  @map("regional_id")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  regional Regional? @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("team_members")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. MÓDULO DE CONTROLE DE ESTOQUE (WMS) — UNIFICADO NO SCHEMA PRINCIPAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum GrupoVisualizacao {
+  estoque
+  inventario
+  ambas
+  operacional
+}
+
+model StockGrupo {
+  id           String            @id @default(uuid())
+  nome         String
+  visualizacao GrupoVisualizacao @default(ambas)
+  regionalId   String?           @map("regional_id")
+  contractId   String?           @map("contract_id")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  regional        Regional?                 @relation(fields: [regionalId], references: [id], onDelete: SetNull)
+  contract        Contract?                 @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  centros         StockCentroDistribuicao[]
+  locais          StockLocalArmazenamento[]
+  produtos        StockProduto[]
+  patrimonioItens StockPatrimonioItem[]
+
+  @@map("stock_grupos")
+}
+
+model StockCentroDistribuicao {
+  id          String   @id @default(uuid())
+  nome        String
+  endereco    String?
+  responsavel String?
+  telefone    String?
+  grupoId     String?  @map("grupo_id")
+  regionalId  String   @map("regional_id")
+  contractId  String?  @map("contract_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  regional Regional                  @relation(fields: [regionalId], references: [id], onDelete: Cascade)
+  contract Contract?                 @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  grupo    StockGrupo?               @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+  locais   StockLocalArmazenamento[]
+  entradas StockEntrada[]
+  saidas   StockSaida[]
+
+  @@index([regionalId, contractId])
+  @@map("stock_centros_distribuicao")
+}
+
+model StockLocalArmazenamento {
+  id                   String   @id @default(uuid())
+  nome                 String
+  observacoes          String?
+  padrao               Boolean  @default(false)
+  grupoId              String?  @map("grupo_id")
+  centroDistribuicaoId String   @map("centro_distribuicao_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  centroDistribuicao StockCentroDistribuicao @relation(fields: [centroDistribuicaoId], references: [id], onDelete: Cascade)
+  grupo              StockGrupo?             @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+  entradas           StockEntrada[]
+  saidas             StockSaida[]
+
+  @@index([centroDistribuicaoId])
+  @@map("stock_locais_armazenamento")
+}
+
+model StockProduto {
+  id                   String   @id @default(uuid())
+  codigo               String   @unique
+  nome                 String
+  grupoId              String   @map("grupo_id")
+  estoqueMinimo        Int      @default(0) @map("estoque_minimo")
+  custoUnitarioInicial Decimal? @map("custo_unitario_inicial") @db.Decimal(10, 2)
+  unidadeMedida        String   @map("unidade_medida")
+  fotoUrl              String?  @map("foto_url")
+  bridgeProductId      String?  @map("bridge_product_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  grupo         StockGrupo     @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  bridgeProduct Product?       @relation(fields: [bridgeProductId], references: [id], onDelete: SetNull)
+  entradas      StockEntrada[]
+  saidas        StockSaida[]
+
+  @@map("stock_produtos")
+}
+
+model StockEntrada {
+  id                      String   @id @default(uuid())
+  data                    DateTime @default(now())
+  produtoId               String   @map("produto_id")
+  quantidade              Int
+  custoUnitario           Decimal  @map("custo_unitario") @db.Decimal(10, 2)
+  total                   Decimal  @map("total") @db.Decimal(10, 2)
+  notaFiscal              String?  @map("nota_fiscal")
+  diasEntrega             Int?     @map("dias_entrega")
+  localArmazenamentoId    String?  @map("local_armazenamento_id")
+  centroDistribuicaoId    String?  @map("centro_distribuicao_id")
+  fornecedorId            String?  @map("fornecedor_id")
+  registradoPorUserId     String?  @map("registrado_por_user_id")
+  origemSistema           String?  @map("origem_sistema")
+  origemBridgeOrderId     String?  @map("origem_bridge_order_id")
+  origemBridgeOrderItemId String?  @map("origem_bridge_order_item_id")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
+
+  produto            StockProduto             @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  localArmazenamento StockLocalArmazenamento? @relation(fields: [localArmazenamentoId], references: [id], onDelete: SetNull)
+  centroDistribuicao StockCentroDistribuicao? @relation(fields: [centroDistribuicaoId], references: [id], onDelete: SetNull)
+  fornecedor         RegisteredSupplier?      @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  registradoPor      User?                    @relation("StockEntradaRegistradoPor", fields: [registradoPorUserId], references: [id], onDelete: SetNull)
+  origemOrder        Order?                   @relation(fields: [origemBridgeOrderId], references: [id], onDelete: SetNull)
+
+  @@map("stock_entradas")
+}
+
+model StockSaida {
+  id                   String   @id @default(uuid())
+  data                 DateTime @default(now())
+  produtoId            String   @map("produto_id")
+  quantidade           Int
+  custoUnitario        Decimal  @map("custo_unitario") @db.Decimal(10, 2)
+  total                Decimal  @map("total") @db.Decimal(10, 2)
+  notaFiscal           String?  @map("nota_fiscal")
+  localArmazenamentoId String?  @map("local_armazenamento_id")
+  centroDistribuicaoId String?  @map("centro_distribuicao_id")
+  retiradoPorId        String?  @map("retirado_por_id")
+  registradoPorUserId  String?  @map("registrado_por_user_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  produto            StockProduto             @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  localArmazenamento StockLocalArmazenamento? @relation(fields: [localArmazenamentoId], references: [id], onDelete: SetNull)
+  centroDistribuicao StockCentroDistribuicao? @relation(fields: [centroDistribuicaoId], references: [id], onDelete: SetNull)
+  retiradoPor        User?                    @relation("StockSaidaRetiradoPor", fields: [retiradoPorId], references: [id], onDelete: SetNull)
+  registradoPor      User?                    @relation("StockSaidaRegistradoPor", fields: [registradoPorUserId], references: [id], onDelete: SetNull)
+
+  @@map("stock_saidas")
+}
+
+model StockPatrimonioItem {
+  id                 String    @id @default(uuid())
+  grupoId            String    @map("grupo_id")
+  patrimonio         String    @unique
+  tipoItem           String    @map("tipo_item")
+  serial             String?
+  descricao          String?
+  marca              String?
+  modelo             String?
+  valorOriginal      Decimal?  @map("valor_original") @db.Decimal(10, 2)
+  fotoUrl            String?   @map("foto_url")
+  dataAquisicao      DateTime? @map("data_aquisicao")
+  sistemaOperacional String?   @map("sistema_operacional")
+  responsavelUserId  String?   @map("responsavel_user_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  grupo           StockGrupo            @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  responsavelUser User?                 @relation("StockPatrimonioResponsavel", fields: [responsavelUserId], references: [id], onDelete: SetNull)
+  fluxos          StockPatrimonioFluxo[]
+
+  @@map("stock_patrimonio_itens")
+}
+
+model StockPatrimonioFluxo {
+  id               String    @id @default(uuid())
+  inventarioItemId String    @map("inventario_item_id")
+  tipoFluxo        String    @map("tipo_fluxo")
+  statusFluxo      String    @default("ativo") @map("status_fluxo")
+  etapaAtual       String?   @map("etapa_atual")
+  motivoInicial    String?   @map("motivo_inicial")
+  observacoes      String?
+  iniciadoEm       DateTime  @default(now()) @map("iniciado_em")
+  encerradoEm      DateTime? @map("encerrado_em")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  item    StockPatrimonioItem          @relation(fields: [inventarioItemId], references: [id], onDelete: Cascade)
+  eventos StockPatrimonioFluxoEvento[]
+
+  @@map("stock_inventario_fluxos")
+}
+
+model StockPatrimonioFluxoEvento {
+  id           String   @id @default(uuid())
+  fluxoId      String   @map("fluxo_id")
+  ordem        Int
+  etapaCodigo  String   @map("etapa_codigo")
+  etapaNome    String   @map("etapa_nome")
+  statusEvento String   @default("concluido") @map("status_evento")
+  ocorridoEm   DateTime @default(now()) @map("ocorrido_em")
+  referencia   String?
+  observacao   String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  fluxo StockPatrimonioFluxo @relation(fields: [fluxoId], references: [id], onDelete: Cascade)
+
+  @@map("stock_inventario_fluxo_eventos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. TRILHA DE AUDITORIA GLOBAL & CONFORMIDADE CORPORATIVA (LGPD / SOX)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String   // CREATE, UPDATE, DELETE, LOGIN, APPROVE, REJECT, EXPORT
+  entity     String   // Order, Contract, Product, User, StockEntrada, ServiceTicket
+  entityId   String?  @map("entity_id")
+  details    String?
+  diffBefore Json?    @map("diff_before")
+  diffAfter  Json?    @map("diff_after")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
