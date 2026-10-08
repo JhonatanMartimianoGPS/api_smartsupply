@@ -3,6 +3,13 @@ import { systemController } from "../controllers/system.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
 import { storageService } from "../services/storage.service.js";
 import { auditService } from "../services/audit.service.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import {
+  updateSystemModuleSchema,
+  toggleSystemModuleSchema,
+  createSystemModuleCategorySchema,
+  updateSystemModuleCategorySchema,
+} from "../schemas/system.schema.js";
 
 const router = Router();
 
@@ -27,13 +34,27 @@ router.post(
   },
 );
 
-// Módulos do Sistema
+// Módulos do Sistema: todos leem; só o super_admin altera
+const superAdmin = authorize(["super_admin"]);
 router.get("/modules", (req, res, next) => systemController.listModules(req, res, next));
-router.patch("/modules/:id", authorize(["super_admin"]), (req, res, next) =>
+router.post("/modules/enable-all", superAdmin, (req, res, next) => systemController.enableAllModules(req, res, next));
+router.patch("/modules/:id", superAdmin, validate(updateSystemModuleSchema), (req, res, next) =>
   systemController.updateModule(req, res, next),
 );
-router.patch("/modules/:id/toggle", authorize(["super_admin"]), (req, res, next) =>
+router.patch("/modules/:id/toggle", superAdmin, validate(toggleSystemModuleSchema), (req, res, next) =>
   systemController.toggleModule(req, res, next),
+);
+
+// Categorias de módulos
+router.get("/module-categories", (req, res, next) => systemController.listModuleCategories(req, res, next));
+router.post("/module-categories", superAdmin, validate(createSystemModuleCategorySchema), (req, res, next) =>
+  systemController.createModuleCategory(req, res, next),
+);
+router.patch("/module-categories/:id", superAdmin, validate(updateSystemModuleCategorySchema), (req, res, next) =>
+  systemController.updateModuleCategory(req, res, next),
+);
+router.delete("/module-categories/:id", superAdmin, (req, res, next) =>
+  systemController.deleteModuleCategory(req, res, next),
 );
 
 // Presença de usuários

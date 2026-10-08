@@ -20,6 +20,7 @@ export class SystemController {
     }
   }
 
+  // ─── Módulos do Sistema ─────────────────────────────────────────────────────
   async listModules(_req: Request, res: Response, next: NextFunction) {
     try {
       const modules = await systemService.listModules();
@@ -31,7 +32,7 @@ export class SystemController {
 
   async updateModule(req: Request, res: Response, next: NextFunction) {
     try {
-      const module = await systemService.updateModule(req.params.id as string, req.body);
+      const module = await systemService.updateModule(req.user!, req.params.id as string, req.body);
       res.json(module);
     } catch (error) {
       next(error);
@@ -40,9 +41,54 @@ export class SystemController {
 
   async toggleModule(req: Request, res: Response, next: NextFunction) {
     try {
-      const { is_enabled } = req.body;
-      const module = await systemService.toggleModule(req.params.id as string, is_enabled);
+      const module = await systemService.toggleModule(req.user!, req.params.id as string, req.body.is_enabled);
       res.json(module);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async enableAllModules(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await systemService.enableAllModules(req.user!);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ─── Categorias de Módulos ──────────────────────────────────────────────────
+  async listModuleCategories(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const categories = await systemService.listModuleCategories();
+      res.json(categories);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createModuleCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const category = await systemService.createModuleCategory(req.user!, req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateModuleCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const category = await systemService.updateModuleCategory(req.user!, req.params.id as string, req.body);
+      res.json(category);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteModuleCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await systemService.deleteModuleCategory(req.user!, req.params.id as string);
+      res.json(result);
     } catch (error) {
       next(error);
     }

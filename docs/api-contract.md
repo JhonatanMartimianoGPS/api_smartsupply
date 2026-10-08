@@ -39,7 +39,8 @@ Não existem no Prisma, então ficam em camelCase e **precisam estar listados ab
 | Regionais | `/regionals` | ok |
 | Auth | `/auth/*` | ok na API, front a conferir |
 | Equipe | `/system/team-members` | API ok; **front migrar** (`full_name`, `role_label`, `role_title`, `photo_url`, `is_active`) |
-| Módulos, presença | `/system/modules`, `/system/presence/*` | API ok; front migrar |
+| Módulos e categorias de módulos | `/system/modules`, `/system/module-categories` | migrar: a API emite o formato que o front lê (`is_enabled`, `route`, `badge`, `label`, `sort_order`), marcado como transitório |
+| Presença | `/system/presence/*` | API ok; front migrar |
 | Perfis de acesso, IA, governança | `/system/roles`, `/system/ai/*`, `/system/governance/*` | sem backend ainda |
 | Dashboard | `/dashboard/*` | API ok; front migrar (`totalValue` → `totalSpent`, etc.) |
 | Solicitações | `/solicitations` | API ok; front a conferir |

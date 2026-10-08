@@ -1688,26 +1688,37 @@ async function main() {
   // ───────────────────────────────────────────────────────────────────────────
   // 13. MÓDULOS DO SISTEMA (system_modules_config)
   // ───────────────────────────────────────────────────────────────────────────
+  const moduleCategoriesData = [
+    { id: "suprimentos", label: "Suprimentos & Estoque", description: "Gestão de suprimentos, compras, cotações e estoque", color: "orange", sortOrder: 1 },
+    { id: "servicos", label: "Serviços & Chamados", description: "Gestão predial e abertura de chamados", color: "blue", sortOrder: 2 },
+    { id: "comunicacao", label: "Comunicação & Equipe", description: "Feed corporativo, contatos e avisos gerais", color: "teal", sortOrder: 3 },
+    { id: "inteligencia", label: "Inteligência Artificial", description: "Assistente IA Bridget e automações", color: "purple", sortOrder: 4 },
+  ];
+  for (const c of moduleCategoriesData) {
+    await prisma.systemModuleCategory.upsert({ where: { id: c.id }, update: c, create: c });
+  }
+
+  // Mesmos textos, ícones e rotas que o frontend usa como padrão (DEFAULT_SYSTEM_MODULES)
   const modulesConfigData = [
-    { id: "pedido_mensal", name: "Pedido Mensal", category: "suprimentos", enabled: true, roles: ["assistente", "gestor", "admin", "super_admin"] },
-    { id: "suprimentos", name: "Gestão de Suprimentos", category: "suprimentos", enabled: true, roles: ["gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "solicitacoes_especiais", name: "Solicitações Especiais", category: "suprimentos", enabled: true, roles: ["assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "fornecedores", name: "Fornecedores & Cotações", category: "suprimentos", enabled: true, roles: ["suprimentos", "admin", "super_admin"] },
-    { id: "estoque", name: "Gestão de Estoque (WMS)", category: "suprimentos", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "chamados", name: "Central de Chamados", category: "servicos", enabled: true, roles: ["colaborador", "assistente", "gestor", "admin", "super_admin"] },
-    { id: "feed", name: "Feed de Comunicação", category: "comunicacao", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "equipe", name: "Equipe GPS Bridge", category: "comunicacao", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "bridget", name: "Bridget (Assistente IA)", category: "inteligencia", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "pedido_mensal", name: "Pedido Mensal", description: "Lançamento de pedidos regulares de suprimentos por contrato", category: "suprimentos", icon: "Package", route: "/pedido-mensal", badge: "Core", enabled: true, roles: ["assistente", "gestor", "admin", "super_admin"] },
+    { id: "suprimentos", name: "Gestão de Suprimentos", description: "Gestão completa de suprimentos, pedidos, contratos e aprovações", category: "suprimentos", icon: "ShoppingCart", route: "/suprimentos", badge: "Gestão", enabled: true, roles: ["gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "solicitacoes_especiais", name: "Solicitações Especiais", description: "Pedidos extras e solicitações fora do orçamento mensal", category: "suprimentos", icon: "Zap", route: "/nova-solicitacao", badge: null, enabled: true, roles: ["assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "fornecedores", name: "Fornecedores & Cotações", description: "Consolidação de pedidos por fornecedor para envio e ordens de compra", category: "suprimentos", icon: "Truck", route: "/fornecedores", badge: "Novo", enabled: true, roles: ["suprimentos", "admin", "super_admin"] },
+    { id: "estoque", name: "Gestão de Estoque", description: "Controle de saldo, movimentações, inventário e ativos", category: "suprimentos", icon: "Warehouse", route: "/estoque", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "chamados", name: "Central de Chamados", description: "Abertura e acompanhamento de chamados prediais e serviços com SLA", category: "servicos", icon: "Headphones", route: "/chamados", badge: "Core", enabled: true, roles: ["colaborador", "assistente", "gestor", "admin", "super_admin"] },
+    { id: "feed", name: "Feed de Comunicação", description: "Mural corporativo de avisos importantes e comunicados", category: "comunicacao", icon: "Rss", route: "/feed", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "equipe", name: "Equipe GPS Bridge", description: "Vitrine de contatos dos responsáveis e suporte regional", category: "comunicacao", icon: "Users", route: "/equipe", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "bridget", name: "Bridget (Assistente IA)", description: "Assistente inteligente para dúvidas operacionais e regras do sistema", category: "inteligencia", icon: "Bot", route: "/bridget", badge: "IA", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
   ];
 
   for (const m of modulesConfigData) {
     await prisma.systemModule.upsert({
       where: { id: m.id },
-      update: { name: m.name, category: m.category, enabled: m.enabled, roles: m.roles },
+      update: m,
       create: m,
     });
   }
-  console.log(`✅ [Seed] ${modulesConfigData.length} módulos de governança do sistema configurados.`);
+  console.log(`✅ [Seed] ${moduleCategoriesData.length} categorias e ${modulesConfigData.length} módulos do sistema configurados.`);
 
   // Membros da equipe para vitrine
   await prisma.teamMember.createMany({
