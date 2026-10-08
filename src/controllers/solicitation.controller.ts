@@ -1,13 +1,20 @@
 import type { Request, Response, NextFunction } from "express";
+import { AppError } from "../middlewares/error.middleware.js";
 import { solicitationService } from "../services/solicitation.service.js";
+
+// Parâmetros de URL podem chegar como lista ou objeto (?a=1&a=2): só aceitamos texto.
+const asString = (value: unknown) => {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string") throw new AppError(400, "Parâmetro inválido.");
+  return value;
+};
 
 export class SolicitationController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
-      const { contractId, status } = req.query;
-      const solicitations = await solicitationService.listSolicitations({
-        contractId: contractId as string,
-        status: status as string,
+      const solicitations = await solicitationService.listSolicitations(req.user!, {
+        contractId: asString(req.query.contractId),
+        status: asString(req.query.status),
       });
       res.json(solicitations);
     } catch (error) {
@@ -17,7 +24,7 @@ export class SolicitationController {
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const solicitation = await solicitationService.getSolicitationById(req.params.id as string);
+      const solicitation = await solicitationService.getSolicitationById(req.user!, req.params.id as string);
       res.json(solicitation);
     } catch (error) {
       next(error);
@@ -26,8 +33,7 @@ export class SolicitationController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const solicitation = await solicitationService.createSolicitation(userId, req.body);
+      const solicitation = await solicitationService.createSolicitation(req.user!, req.body);
       res.status(201).json(solicitation);
     } catch (error) {
       next(error);
@@ -36,7 +42,7 @@ export class SolicitationController {
 
   async updateItems(req: Request, res: Response, next: NextFunction) {
     try {
-      const items = await solicitationService.updateItems(req.params.id as string, req.body.items || []);
+      const items = await solicitationService.updateItems(req.user!, req.params.id as string, req.body.items);
       res.json(items);
     } catch (error) {
       next(error);
@@ -45,8 +51,7 @@ export class SolicitationController {
 
   async updateStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const result = await solicitationService.updateStep(req.params.id as string, userId, req.body);
+      const result = await solicitationService.updateStep(req.user!, req.params.id as string, req.body);
       res.json(result);
     } catch (error) {
       next(error);
@@ -55,8 +60,7 @@ export class SolicitationController {
 
   async revertStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const result = await solicitationService.revertStep(req.params.id as string, userId, req.body);
+      const result = await solicitationService.revertStep(req.user!, req.params.id as string, req.body);
       res.json(result);
     } catch (error) {
       next(error);
@@ -65,7 +69,7 @@ export class SolicitationController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await solicitationService.deleteSolicitation(req.params.id as string);
+      const result = await solicitationService.deleteSolicitation(req.user!, req.params.id as string);
       res.json(result);
     } catch (error) {
       next(error);
@@ -74,7 +78,7 @@ export class SolicitationController {
 
   async getHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const history = await solicitationService.getHistory(req.params.id as string);
+      const history = await solicitationService.getHistory(req.user!, req.params.id as string);
       res.json(history);
     } catch (error) {
       next(error);
@@ -83,8 +87,7 @@ export class SolicitationController {
 
   async addHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
-      const entry = await solicitationService.addHistory(req.params.id as string, userId, req.body);
+      const entry = await solicitationService.addHistory(req.user!, req.params.id as string, req.body);
       res.json(entry);
     } catch (error) {
       next(error);

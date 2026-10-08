@@ -490,7 +490,7 @@ export class ContractService {
         where: { contractId, ano, mes, status: { in: ["aprovado", "entregue"] } },
         _sum: { totalAmount: true },
       }),
-      // Solicitação concluída: o frontend grava "concluido" (como o Supabase); o seed usa "aprovada".
+      // Solicitação concluída: o frontend grava "concluido" (como o Supabase); "aprovada" é vocabulário antigo
       // Valor = quantidade x preço gravado no item.
       prisma.$queryRaw<Array<{ total: unknown }>>`
         SELECT COALESCE(SUM(si.quantity * si.unit_price), 0) AS total

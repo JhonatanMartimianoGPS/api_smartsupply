@@ -1395,7 +1395,7 @@ async function main() {
           contractId: sirioLibanes.id,
           createdById: assistente.id,
           status: "pendente",
-          step: "gestor",
+          step: "aguardando_aprovacao_gestor",
           notes: "Aquisição emergencial de dispensers automáticos com sensor e refis para ampliação da UTI Adulto.",
           totalAmount: 2265.0,
           items: {
@@ -1416,7 +1416,7 @@ async function main() {
             create: {
               userId: assistente.id,
               action: "Criação da Solicitação Especial",
-              step: "gestor",
+              step: "aguardando_aprovacao_gestor",
               notes: "Necessidade após inauguração de 10 novos leitos de UTI.",
             },
           },
@@ -1426,7 +1426,7 @@ async function main() {
 
     // Solicitação 2: Em análise na etapa Suprimentos
     const existingSol2 = await prisma.solicitation.findFirst({
-      where: { contractId: torreSantander.id, status: "em_analise" },
+      where: { contractId: torreSantander.id, status: "pendente" },
     });
 
     if (!existingSol2) {
@@ -1434,8 +1434,8 @@ async function main() {
         data: {
           contractId: torreSantander.id,
           createdById: assistente.id,
-          status: "em_analise",
-          step: "suprimentos",
+          status: "pendente",
+          step: "aguardando_compra_suprimentos",
           notes: "Tapetes ergonômicos antifadiga de borracha para bancadas de recepção e triagem de encomendas.",
           totalAmount: 870.0,
           items: {
@@ -1449,8 +1449,8 @@ async function main() {
           },
           history: {
             create: [
-              { userId: assistente.id, action: "Criação da Solicitação", step: "gestor", notes: "Melhoria de ergonomia solicitada pelo SESMT" },
-              { userId: gestor?.id || assistente.id, action: "Aprovação pelo Gestor", step: "suprimentos", notes: "Verba aprovada; encaminhado para cotação em Suprimentos" },
+              { userId: assistente.id, action: "Criação da Solicitação", step: "aguardando_aprovacao_gestor", notes: "Melhoria de ergonomia solicitada pelo SESMT" },
+              { userId: gestor?.id || assistente.id, action: "Aprovação pelo Gestor", step: "aguardando_compra_suprimentos", notes: "Verba aprovada; encaminhado para cotação em Suprimentos" },
             ],
           },
         },
@@ -1459,7 +1459,7 @@ async function main() {
 
     // Solicitação 3: Concluída / Aprovada
     const existingSol3 = await prisma.solicitation.findFirst({
-      where: { contractId: sirioLibanes.id, status: "aprovada" },
+      where: { contractId: sirioLibanes.id, status: "concluido" },
     });
 
     if (!existingSol3) {
@@ -1467,8 +1467,8 @@ async function main() {
         data: {
           contractId: sirioLibanes.id,
           createdById: assistente.id,
-          status: "aprovada",
-          step: "finalizado",
+          status: "concluido",
+          step: "concluido",
           notes: "Lavadora de alta pressão profissional para higienização e esterilização de docas de ambulâncias.",
           totalAmount: 2450.0,
           items: {
@@ -1482,9 +1482,9 @@ async function main() {
           },
           history: {
             create: [
-              { userId: assistente.id, action: "Solicitação Aberta", step: "gestor" },
-              { userId: gestor?.id || assistente.id, action: "Aprovação Gestor", step: "suprimentos" },
-              { userId: suprimentosUser?.id || assistente.id, action: "Cotação & Emissão de Pedido de Compra", step: "finalizado", notes: "Ordem de compra #OC-9982 gerada com entrega programada." },
+              { userId: assistente.id, action: "Solicitação Aberta", step: "aguardando_aprovacao_gestor" },
+              { userId: gestor?.id || assistente.id, action: "Aprovação Gestor", step: "aguardando_compra_suprimentos" },
+              { userId: suprimentosUser?.id || assistente.id, action: "Cotação & Emissão de Pedido de Compra", step: "concluido", notes: "Ordem de compra #OC-9982 gerada com entrega programada." },
             ],
           },
         },
