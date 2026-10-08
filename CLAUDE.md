@@ -68,7 +68,7 @@ Padrão do código (copie de `regional.*`):
 ## Regras de negócio e acesso (no lugar de RLS e triggers)
 
 - **Orçamento**: o consumo é debitado quando o pedido é aprovado ou entregue e estornado quando sai desse estado (`order.service.ts`). O desconto por categoria de produto (`ContractProductCategoryBudgetPeriod`) ainda **não** está implementado.
-- **Acesso por regional/contrato**: no Supabase vinha da RLS. Hoje só o módulo de estoque filtra por regional. Ao tocar em pedidos, solicitações, chamados e contratos, **aplique escopo** do usuário (`req.user.regionals`) em vez de repetir o buraco. Não exponha dado de outra regional.
+- **Acesso por regional/contrato**: no Supabase vinha da RLS. Use `accessService` (`src/services/access.service.ts`): `contractFilter(user)` nas listagens e `assertContractAccess(user, contractId)` para um contrato. Ele lê os vínculos do banco, e não do token. Pedidos já usam; ao tocar em solicitações, chamados, contratos e dashboard, aplique o mesmo escopo. O estoque ainda tem filtro próprio. Não exponha dado de outra regional.
 - **Notificações e histórico**: eram triggers. Hoje precisam ser criados explicitamente no service que muda o estado.
 - Antes de portar uma regra do Supabase, consulte a migration original em `client_smartsupply` (branch `main`, pasta `supabase/migrations`) para entender o comportamento exato.
 

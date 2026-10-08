@@ -5,7 +5,7 @@ export class OrderController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const { regionalId, contractId, status, competenceMonth } = req.query;
-      const orders = await orderService.listOrders({
+      const orders = await orderService.listOrders(req.user!, {
         regionalId: regionalId as string,
         contractId: contractId as string,
         status: status as string,
@@ -19,9 +19,8 @@ export class OrderController {
 
   async getMyOrders(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user.userId;
       const month = req.query.month as string | undefined;
-      const orders = await orderService.getMyOrders(userId, month);
+      const orders = await orderService.getMyOrders(req.user!, month);
       res.json(orders);
     } catch (error) {
       next(error);
@@ -30,8 +29,7 @@ export class OrderController {
 
   async getActiveMonthOrders(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = (req as any).user;
-      const orders = await orderService.getActiveMonthOrders(user.userId, user.role);
+      const orders = await orderService.getActiveMonthOrders(req.user!);
       res.json(orders);
     } catch (error) {
       next(error);
@@ -41,7 +39,7 @@ export class OrderController {
   async getCurrentMonthOrder(req: Request, res: Response, next: NextFunction) {
     try {
       const contractId = req.query.contractId as string;
-      const order = await orderService.getCurrentMonthOrder(contractId);
+      const order = await orderService.getCurrentMonthOrder(req.user!, contractId);
       res.json(order);
     } catch (error) {
       next(error);
@@ -50,7 +48,7 @@ export class OrderController {
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const order = await orderService.getOrderById(req.params.id as string);
+      const order = await orderService.getOrderById(req.user!, req.params.id as string);
       res.json(order);
     } catch (error) {
       next(error);
@@ -90,7 +88,7 @@ export class OrderController {
   async queryItems(req: Request, res: Response, next: NextFunction) {
     try {
       const { orderIds } = req.body;
-      const items = await orderService.queryItems(orderIds || []);
+      const items = await orderService.queryItems(req.user!, orderIds || []);
       res.json(items);
     } catch (error) {
       next(error);
@@ -109,7 +107,7 @@ export class OrderController {
 
   async getHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const history = await orderService.getOrderHistory(req.params.id as string);
+      const history = await orderService.getOrderHistory(req.user!, req.params.id as string);
       res.json(history);
     } catch (error) {
       next(error);
@@ -138,7 +136,7 @@ export class OrderController {
   // ─── Divergências de Entrega ────────────────────────────────────────────────
   async listDivergences(req: Request, res: Response, next: NextFunction) {
     try {
-      const divergences = await orderService.listDeliveryDivergences();
+      const divergences = await orderService.listDeliveryDivergences(req.user!);
       res.json(divergences);
     } catch (error) {
       next(error);
@@ -167,7 +165,7 @@ export class OrderController {
   // ─── Relatos de Problemas ───────────────────────────────────────────────────
   async listIssueReports(req: Request, res: Response, next: NextFunction) {
     try {
-      const issues = await orderService.listIssueReports();
+      const issues = await orderService.listIssueReports(req.user!);
       res.json(issues);
     } catch (error) {
       next(error);

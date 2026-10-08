@@ -2,18 +2,24 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type { OrderStatus } from "@prisma/client";
 import { auditService } from "./audit.service.js";
+import { accessService, type AccessUser } from "./access.service.js";
 
 export class OrderService {
   /**
    * Lista pedidos com filtros operacionais
    */
-  async listOrders(params?: {
-    regionalId?: string;
-    contractId?: string;
-    status?: string;
-    competenceMonth?: string; // YYYY-MM
-  }) {
-    const where: any = {};
+  async listOrders(
+    user: AccessUser,
+    params?: {
+      regionalId?: string;
+      contractId?: string;
+      status?: string;
+      competenceMonth?: string; // YYYY-MM
+    },
+  ) {
+    // O escopo vai dentro de AND para o filtro de regional/contrato enviado pelo cliente
+    // não sobrescrevê-lo (where.contract = ... mais abaixo).
+    const where: any = { AND: [{ contract: accessService.contractFilter(user) }] };
 
     if (params?.status) {
       where.status = params.status as OrderStatus;
@@ -55,8 +61,11 @@ export class OrderService {
   /**
    * Lista pedidos do próprio usuário logado
    */
-  async getMyOrders(userId: string, month?: string) {
-    const where: any = { createdById: userId };
+  async getMyOrders(user: AccessUser, month?: string) {
+    const where: any = {
+      createdById: user.userId,
+      AND: [{ contract: accessService.contractFilter(user) }],
+    };
 
     if (month) {
       const [ano, mes] = month.split("-").map(Number);
@@ -86,22 +95,12 @@ export class OrderService {
   /**
    * Pedidos do mês ativo acessíveis
    */
-  async getActiveMonthOrders(userId: string, userRole: string) {
+  async getActiveMonthOrders(user: AccessUser) {
     const now = new Date();
     const mes = now.getMonth() + 1;
     const ano = now.getFullYear();
 
-    const where: any = { mes, ano };
-
-    // Se não for super_admin ou admin, filtra pelos contratos do usuário
-    if (userRole !== "super_admin" && userRole !== "admin") {
-      const userContracts = await prisma.userContract.findMany({
-        where: { userId },
-        select: { contractId: true },
-      });
-      const contractIds = userContracts.map((c) => c.contractId);
-      where.contractId = { in: contractIds };
-    }
+    const where: any = { mes, ano, contract: accessService.contractFilter(user) };
 
     const orders = await prisma.order.findMany({
       where,
@@ -136,7 +135,12 @@ export class OrderService {
   /**
    * Pedido ativo do mês atual para um contrato
    */
-  async getCurrentMonthOrder(contractId: string) {
+  async getCurrentMonthOrder(user: AccessUser, contractId: string) {
+    // contractId vem da URL: sem essa checagem, um valor ausente ou malformado viraria "qualquer contrato"
+    if (typeof contractId !== "string" || !contractId) {
+      throw new AppError(400, "Contrato é obrigatório.");
+    }
+
     const now = new Date();
     const mes = now.getMonth() + 1;
     const ano = now.getFullYear();
@@ -147,6 +151,7 @@ export class OrderService {
         mes,
         ano,
         isExtraOrder: false,
+        contract: accessService.contractFilter(user),
       },
       include: {
         contract: {
@@ -165,9 +170,9 @@ export class OrderService {
   /**
    * Detalhes de um pedido por ID
    */
-  async getOrderById(id: string) {
-    const order = await prisma.order.findUnique({
-      where: { id },
+  async getOrderById(user: AccessUser, id: string) {
+    const order = await prisma.order.findFirst({
+      where: { id, contract: accessService.contractFilter(user) },
       include: {
         contract: {
           include: { regional: true, category: true },
@@ -528,9 +533,15 @@ export class OrderService {
   /**
    * Consulta em lote itens de pedidos
    */
-  async queryItems(orderIds: string[]) {
+  async queryItems(user: AccessUser, orderIds: string[]) {
+    if (!Array.isArray(orderIds)) {
+      throw new AppError(400, "orderIds deve ser uma lista de ids.");
+    }
     const items = await prisma.orderItem.findMany({
-      where: { orderId: { in: orderIds } },
+      where: {
+        orderId: { in: orderIds },
+        order: { contract: accessService.contractFilter(user) },
+      },
       include: { product: true },
     });
 
@@ -624,7 +635,15 @@ export class OrderService {
   /**
    * Histórico de auditoria do pedido
    */
-  async getOrderHistory(orderId: string) {
+  async getOrderHistory(user: AccessUser, orderId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contract: accessService.contractFilter(user) },
+      select: { id: true },
+    });
+    if (!order) {
+      throw new AppError(404, "Pedido não encontrado.");
+    }
+
     const history = await prisma.orderHistory.findMany({
       where: { orderId },
       orderBy: { createdAt: "desc" },
@@ -679,8 +698,9 @@ export class OrderService {
   }
 
   // ─── Divergências de Entrega ────────────────────────────────────────────────
-  async listDeliveryDivergences(params?: { competenceMonth?: string }) {
+  async listDeliveryDivergences(user: AccessUser, params?: { competenceMonth?: string }) {
     return prisma.orderDeliveryDivergence.findMany({
+      where: { order: { contract: accessService.contractFilter(user) } },
       include: {
         order: { include: { contract: true } },
       },
@@ -710,8 +730,9 @@ export class OrderService {
   }
 
   // ─── Relatos de Problemas ───────────────────────────────────────────────────
-  async listIssueReports() {
+  async listIssueReports(user: AccessUser) {
     return prisma.orderIssueReport.findMany({
+      where: { order: { contract: accessService.contractFilter(user) } },
       include: {
         order: { include: { contract: true } },
       },
