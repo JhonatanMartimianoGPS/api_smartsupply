@@ -1,4 +1,4 @@
-import { Prisma, type SystemModule, type SystemModuleCategory } from "@prisma/client";
+import { Prisma, type SystemModuleCategory } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type {
@@ -48,26 +48,8 @@ export class SystemService {
   // Só o super_admin altera (no Supabase: policy "Allow super_admin to manage system_modules_config").
   // O perfil é checado na rota (authorize); aqui ficam as regras.
 
-  // Transitório: o frontend lê o formato herdado do Supabase (is_enabled, route, badge, updated_at).
-  private formatModule(m: SystemModule) {
-    return {
-      id: m.id,
-      name: m.name,
-      description: m.description ?? "",
-      category: m.category,
-      is_enabled: m.enabled,
-      icon: m.icon ?? "",
-      route: m.route ?? "",
-      badge: m.badge,
-      roles: m.roles,
-      updated_at: m.updatedAt.toISOString(),
-      updated_by: m.updatedById,
-    };
-  }
-
   async listModules() {
-    const modules = await prisma.systemModule.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
-    return modules.map((m) => this.formatModule(m));
+    return prisma.systemModule.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
   }
 
   private async findModule(id: string) {
@@ -90,7 +72,7 @@ export class SystemService {
         name: data.name,
         description: data.description,
         category: data.category,
-        enabled: data.is_enabled ?? data.enabled,
+        enabled: data.enabled,
         icon: data.icon,
         route: data.route,
         badge: data.badge,
@@ -105,10 +87,10 @@ export class SystemService {
       entity: "SystemConfig",
       entityId: id,
       details: `Módulo "${module.name}" atualizado.`,
-      diffBefore: this.formatModule(before),
-      diffAfter: this.formatModule(module),
+      diffBefore: { ...before },
+      diffAfter: { ...module },
     });
-    return this.formatModule(module);
+    return module;
   }
 
   async toggleModule(user: AccessUser, id: string, enabled: boolean) {
@@ -124,7 +106,7 @@ export class SystemService {
       entityId: id,
       details: `Módulo "${module.name}" ${enabled ? "ativado" : "desativado"}.`,
     });
-    return this.formatModule(module);
+    return module;
   }
 
   async enableAllModules(user: AccessUser) {
@@ -142,18 +124,6 @@ export class SystemService {
   }
 
   // ─── Categorias de Módulos ──────────────────────────────────────────────────
-  private formatCategory(c: SystemModuleCategory) {
-    return {
-      id: c.id,
-      label: c.label,
-      description: c.description,
-      color: c.color,
-      sort_order: c.sortOrder,
-      created_at: c.createdAt.toISOString(),
-      updated_at: c.updatedAt.toISOString(),
-    };
-  }
-
   private async assertCategoryExists(id: string) {
     const count = await prisma.systemModuleCategory.count({ where: { id } });
     if (count === 0) {
@@ -173,8 +143,7 @@ export class SystemService {
   }
 
   async listModuleCategories() {
-    const categories = await prisma.systemModuleCategory.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
-    return categories.map((c) => this.formatCategory(c));
+    return prisma.systemModuleCategory.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
   }
 
   async createModuleCategory(user: AccessUser, data: CreateSystemModuleCategoryInput) {
@@ -182,7 +151,7 @@ export class SystemService {
     if (!id) {
       throw new AppError(400, "Não foi possível gerar um identificador para a categoria.");
     }
-    const sortOrder = data.sort_order ?? (await prisma.systemModuleCategory.count()) + 1;
+    const sortOrder = data.sortOrder ?? (await prisma.systemModuleCategory.count()) + 1;
 
     let category: SystemModuleCategory;
     try {
@@ -210,7 +179,7 @@ export class SystemService {
       entityId: id,
       details: `Categoria de módulo "${category.label}" criada.`,
     });
-    return this.formatCategory(category);
+    return category;
   }
 
   async updateModuleCategory(user: AccessUser, id: string, data: UpdateSystemModuleCategoryInput) {
@@ -221,7 +190,7 @@ export class SystemService {
         label: data.label,
         description: data.description,
         color: data.color,
-        sortOrder: data.sort_order,
+        sortOrder: data.sortOrder,
       },
     });
     void auditService.log({
@@ -231,7 +200,7 @@ export class SystemService {
       entityId: id,
       details: `Categoria de módulo "${category.label}" atualizada.`,
     });
-    return this.formatCategory(category);
+    return category;
   }
 
   async deleteModuleCategory(user: AccessUser, id: string) {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { systemController } from "../controllers/system.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { storageService } from "../services/storage.service.js";
 import { auditService } from "../services/audit.service.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -25,6 +26,7 @@ router.get("/health/ping", (req, res, next) => systemController.ping(req, res, n
 
 // Rotas autenticadas
 router.use(authenticate);
+router.use(apiConvention);
 
 // Upload de avatar de membros da equipe
 router.post(

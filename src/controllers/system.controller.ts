@@ -46,7 +46,7 @@ export class SystemController {
 
   async toggleModule(req: Request, res: Response, next: NextFunction) {
     try {
-      const module = await systemService.toggleModule(req.user!, req.params.id as string, req.body.is_enabled);
+      const module = await systemService.toggleModule(req.user!, req.params.id as string, req.body.enabled);
       res.json(module);
     } catch (error) {
       next(error);

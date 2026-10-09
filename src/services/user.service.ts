@@ -3,26 +3,16 @@ import { hashPassword } from "../utils/password.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type { AppRole } from "@prisma/client";
 
-// Transitório: as telas leem fullName/full_name, user_id, regionalIds/contractIds e assigned_contracts
-// (nomes herdados do Supabase). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
+// Usuário no contrato da API: o objeto do Prisma (sem passwordHash) mais os ids das regionais e dos
+// contratos (regional_ids, contract_ids) e as entidades relacionadas em regionals/contracts.
 function formatUser(u: any) {
   const { passwordHash: _passwordHash, regionals = [], contracts = [], ...rest } = u;
-  const regionalIds = regionals.map((r: any) => r.regionalId);
-  const contractIds = contracts.map((c: any) => c.contractId);
   return {
     ...rest,
-    user_id: u.id,
-    fullName: u.name,
-    full_name: u.name,
-    is_blocked: u.isBlocked,
-    regional_ids: regionalIds,
-    regionalIds,
+    regionalIds: regionals.map((r: any) => r.regionalId),
+    contractIds: contracts.map((c: any) => c.contractId),
     regionals: regionals.map((r: any) => r.regional).filter(Boolean),
-    contract_ids: contractIds,
-    contractIds,
-    assigned_contracts: contractIds,
     contracts: contracts.map((c: any) => c.contract).filter(Boolean),
-    created_at: u.createdAt?.toISOString?.() ?? u.createdAt,
   };
 }
 
