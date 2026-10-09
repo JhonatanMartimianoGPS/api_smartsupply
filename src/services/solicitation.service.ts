@@ -4,7 +4,7 @@ import { accessService, type AccessUser } from "./access.service.js";
 import { notificationService } from "./notification.service.js";
 
 // Solicitação é fora de catálogo: o item pode ter só a descrição, sem produto
-type ItemInput = { product_id?: string; quantity: number; unit_price?: number; description?: string };
+type ItemInput = { productId?: string | null; quantity: number; unitPrice?: number | null; description?: string | null };
 
 // Quem pode editar itens e avançar etapas (no Supabase: policies de UPDATE de admin, suprimentos e gestor)
 const MANAGER_ROLES = ["super_admin", "admin", "suprimentos", "gestor"];
@@ -40,69 +40,20 @@ const SOLICITATION_INCLUDE = {
 
 const HISTORY_INCLUDE = { user: { select: { name: true } } } as const;
 
-// Transitório: o frontend ainda lê os nomes do Supabase (solicitation_items, created_at, user_profile,
-// unit_price, product.tabela). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
+// Item no contrato da API: o modelo, o produto (com categoria e fornecedor calculados) e o total da linha
 function formatItem(it: any) {
   const unitPrice = Number(it.unitPrice);
-  const product = it.product
-    ? {
-        id: it.product.id,
-        name: it.product.name,
-        codigo: it.product.codigo,
-        unidade: it.product.unidade,
-        tabela: Number(it.product.tabela),
-        fornecedor: it.product.supplier?.name ?? null,
-        categoria: it.product.category?.name ?? null,
-      }
-    : null;
   return {
     ...it,
-    product,
-    product_id: it.productId,
-    solicitation_id: it.solicitationId,
-    unitPrice,
-    unit_price: unitPrice,
+    product: it.product
+      ? { ...it.product, categoria: it.product.category?.name ?? null, fornecedor: it.product.supplier?.name ?? null }
+      : null,
     total: Math.round(unitPrice * it.quantity * 100) / 100,
-    created_at: it.createdAt?.toISOString?.() ?? it.createdAt,
-  };
-}
-
-function formatHistory(h: any) {
-  return {
-    ...h,
-    solicitation_id: h.solicitationId,
-    user_id: h.userId,
-    to_step: h.step,
-    details: h.notes,
-    created_at: h.createdAt?.toISOString?.() ?? h.createdAt,
-    user_profile: { full_name: h.user?.name ?? "Usuário" },
   };
 }
 
 function formatSolicitation(s: any) {
-  const items = (s.items ?? []).map(formatItem);
-  const totalAmount = Number(s.totalAmount);
-  return {
-    ...s,
-    contract_id: s.contractId,
-    user_id: s.createdById,
-    user_profile: s.createdBy ? { full_name: s.createdBy.name } : null,
-    contract: s.contract
-      ? {
-          ...s.contract,
-          regional_id: s.contract.regionalId,
-          regional_name: s.contract.regional?.name ?? null,
-          allow_custom_prices: s.contract.allowCustomPrices,
-        }
-      : null,
-    totalAmount,
-    total_amount: totalAmount,
-    items,
-    solicitation_items: items,
-    history: s.history ? s.history.map(formatHistory) : undefined,
-    created_at: s.createdAt?.toISOString?.() ?? s.createdAt,
-    updated_at: s.updatedAt?.toISOString?.() ?? s.updatedAt,
-  };
+  return { ...s, items: (s.items ?? []).map(formatItem) };
 }
 
 export class SolicitationService {
@@ -143,11 +94,11 @@ export class SolicitationService {
       if (!it || typeof it !== "object") {
         throw new AppError(400, "Item inválido.");
       }
-      if (it.product_id !== undefined && it.product_id !== null && typeof it.product_id !== "string") {
+      if (it.productId !== undefined && it.productId !== null && typeof it.productId !== "string") {
         throw new AppError(400, "Produto do item inválido.");
       }
       optionalText(it.description, "Descrição do item", 500);
-      const hasProduct = typeof it.product_id === "string" && it.product_id !== "";
+      const hasProduct = typeof it.productId === "string" && it.productId !== "";
       const hasDescription = typeof it.description === "string" && it.description.trim() !== "";
       if (!hasProduct && !hasDescription) {
         throw new AppError(400, "Cada item precisa de um produto ou de uma descrição.");
@@ -155,19 +106,19 @@ export class SolicitationService {
       if (!Number.isInteger(it.quantity) || it.quantity <= 0 || it.quantity > MAX_QUANTITY) {
         throw new AppError(400, "A quantidade de cada item deve ser um número inteiro maior que zero.");
       }
-      if (it.unit_price !== undefined && it.unit_price !== null) {
-        if (typeof it.unit_price !== "number" || !(it.unit_price >= 0) || it.unit_price > MAX_UNIT_PRICE) {
+      if (it.unitPrice !== undefined && it.unitPrice !== null) {
+        if (typeof it.unitPrice !== "number" || !(it.unitPrice >= 0) || it.unitPrice > MAX_UNIT_PRICE) {
           throw new AppError(400, "O preço unitário deve estar entre zero e 99.999.999,99.");
         }
       }
-      total += (it.unit_price || 0) * it.quantity;
+      total += (it.unitPrice || 0) * it.quantity;
     }
     if (total > MAX_TOTAL) {
       throw new AppError(400, "O valor total da solicitação é grande demais.");
     }
 
     // Produto informado precisa existir (senão o banco recusaria com erro de chave estrangeira)
-    const productIds = [...new Set((items as ItemInput[]).map((it) => it.product_id).filter(Boolean))] as string[];
+    const productIds = [...new Set((items as ItemInput[]).map((it) => it.productId).filter(Boolean))] as string[];
     if (productIds.length > 0) {
       const found = await prisma.product.count({ where: { id: { in: productIds } } });
       if (found !== productIds.length) {
@@ -217,10 +168,10 @@ export class SolicitationService {
 
     let totalAmount = 0;
     const itemsToCreate = items.map((it) => {
-      const price = it.unit_price || 0;
+      const price = it.unitPrice || 0;
       totalAmount += price * it.quantity;
       return {
-        productId: it.product_id || null,
+        productId: it.productId || null,
         quantity: it.quantity,
         unitPrice: price,
         description: it.description,
@@ -263,11 +214,11 @@ export class SolicitationService {
 
     let totalAmount = 0;
     const itemsToCreate = items.map((it) => {
-      const price = it.unit_price || 0;
+      const price = it.unitPrice || 0;
       totalAmount += price * it.quantity;
       return {
         solicitationId: id,
-        productId: it.product_id || null,
+        productId: it.productId || null,
         quantity: it.quantity,
         unitPrice: price,
         description: it.description,
@@ -390,7 +341,7 @@ export class SolicitationService {
       include: HISTORY_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
-    return history.map(formatHistory);
+    return history;
   }
 
   async addHistory(
@@ -415,7 +366,7 @@ export class SolicitationService {
       },
       include: HISTORY_INCLUDE,
     });
-    return formatHistory(entry);
+    return entry;
   }
 }
 

@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { solicitationController } from "../controllers/solicitation.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 router.get("/", (req, res, next) => solicitationController.list(req, res, next));
 router.post("/", (req, res, next) => solicitationController.create(req, res, next));
