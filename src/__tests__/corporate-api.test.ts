@@ -58,7 +58,7 @@ describe("GPS Bridge — Enterprise Backend Automated Integration Tests", () => 
     });
     assert.strictEqual(res.status, 400);
     const data: any = await res.json();
-    assert.strictEqual(data.statusCode, 400);
+    assert.strictEqual(data.status_code, 400);
     assert.ok(Array.isArray(data.details));
   });
 
@@ -152,7 +152,7 @@ describe("GPS Bridge — Enterprise Backend Automated Integration Tests", () => 
     });
     assert.strictEqual(res.status, 400);
     const data: any = await res.json();
-    assert.strictEqual(data.statusCode, 400);
+    assert.strictEqual(data.status_code, 400);
   });
 
   it("15. Pedidos: Lista de pedidos mensais deve responder com 200 para usuário autenticado", async () => {

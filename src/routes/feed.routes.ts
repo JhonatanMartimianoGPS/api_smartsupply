@@ -13,7 +13,7 @@ router.post(
   storageService.getUploadMiddleware("feed-attachments"),
   (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ statusCode: 400, message: "Nenhum arquivo enviado.", error: "Bad Request" });
+      return res.status(400).json({ status_code: 400, message: "Nenhum arquivo enviado.", error: "Bad Request" });
     }
     const info = storageService.formatUploadResult(req.file, "feed-attachments");
     return res.json({ url: info.url, fileName: info.fileName, size: info.size });

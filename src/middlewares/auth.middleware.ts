@@ -15,7 +15,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
-      statusCode: 401,
+      status_code: 401,
       message: "Token de autenticação não fornecido ou inválido",
       error: "Unauthorized",
     });
@@ -29,7 +29,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     next();
   } catch (error) {
     return res.status(401).json({
-      statusCode: 401,
+      status_code: 401,
       message: "Sessão expirada ou token inválido. Faça login novamente.",
       error: "Unauthorized",
     });
@@ -40,7 +40,7 @@ export function authorize(allowedRoles: AppRole[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
-        statusCode: 401,
+        status_code: 401,
         message: "Usuário não autenticado",
         error: "Unauthorized",
       });
@@ -52,7 +52,7 @@ export function authorize(allowedRoles: AppRole[]) {
 
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
-        statusCode: 403,
+        status_code: 403,
         message: "Acesso negado: seu perfil não possui permissão para este recurso",
         error: "Forbidden",
       });

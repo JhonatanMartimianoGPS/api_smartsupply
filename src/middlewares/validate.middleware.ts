@@ -14,7 +14,7 @@ export function validate(schema: ZodSchema) {
           .map((i) => `${i.path.map((p) => (typeof p === "string" ? toSnakeKey(p) : p)).join(".")}: ${i.message}`)
           .join(", ");
         return res.status(400).json({
-          statusCode: 400,
+          status_code: 400,
           message: `Dados inválidos: ${errorMessages}`,
           error: "Bad Request",
           details: error.issues,

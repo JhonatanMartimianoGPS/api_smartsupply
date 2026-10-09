@@ -12,6 +12,7 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 - **Campos calculados** (não existem no modelo) também ficam em snake_case, são montados no service e **precisam estar listados abaixo**, por recurso.
 - **Nunca duas grafias da mesma chave** na mesma resposta.
 - Query params (`?periodMonth=`) ficam como estão por enquanto; migram no fechamento da convenção.
+- **Erro**: toda resposta de erro é `{ status_code, message, error }`; erro de validação (400) traz também `details` (as issues do Zod, sem conversão). O cliente mostra só `message`.
 
 ### Como funciona no código
 

@@ -53,7 +53,7 @@ Padrão do código (copie de `regional.*`):
 
 - Controller: `export class XController { async método(req, res, next) { try { … } catch (error) { next(error); } } }` e `export const xController = new XController();`. O service segue o mesmo molde: `export const xService = new XService();`.
 - Rota: `const router = Router(); router.use(authenticate);` e cada handler como `(req, res, next) => xController.método(req, res, next)`. Exporta `xRoutes`.
-- Erro esperado: `throw new AppError(status, 'Mensagem em português.')`. A resposta é `{ statusCode, message, error }`.
+- Erro esperado: `throw new AppError(status, 'Mensagem em português.')`. A resposta é `{ status_code, message, error }` (erro de validação traz também `details`).
 - Imports relativos **com extensão `.js`** (`'../lib/prisma.js'`), exigência do `NodeNext`.
 - Toda rota nova é registrada em `src/routes/index.ts`.
 - Rotas de escrita devem ter `authorize([...])`. Toda rota de `DELETE`/`PUT`/`PATCH` sobre dado de um dono precisa **checar perfil e escopo** (veja Acesso abaixo).

@@ -207,7 +207,7 @@ export class TicketController {
 
       if (!fileUrl || !fileName) {
         return res.status(400).json({
-          statusCode: 400,
+          status_code: 400,
           message: "Arquivo ou fileUrl/fileName é obrigatório.",
           error: "Bad Request",
         });

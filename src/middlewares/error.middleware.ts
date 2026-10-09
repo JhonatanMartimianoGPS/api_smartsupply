@@ -28,7 +28,7 @@ export function errorHandler(
   }
 
   res.status(statusCode).json({
-    statusCode,
+    status_code: statusCode,
     message,
     error: statusCode >= 500 ? "Internal Server Error" : "Bad Request",
   });

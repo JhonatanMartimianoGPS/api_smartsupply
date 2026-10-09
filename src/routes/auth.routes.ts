@@ -2,9 +2,13 @@ import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { z } from "zod";
 
 const router = Router();
+
+// Corpo em snake_case (refresh_token, current_password...) e resposta em snake_case (access_token...)
+router.use(apiConvention);
 
 const loginSchema = z.object({
   email: z.string().email("E-mail com formato inválido"),
