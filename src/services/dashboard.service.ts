@@ -79,7 +79,6 @@ export class DashboardService {
       rejectedOrders,
       extraOrders,
       totalSpent,
-      totalValue: totalSpent,
       approvedRate: totalOrders > 0 ? ((approvedOrders + deliveredOrders) / totalOrders) * 100 : 0,
     };
   }
@@ -100,13 +99,11 @@ export class DashboardService {
       orderBy: { name: "asc" },
     });
 
-    // Transitório: totalSpent/usedBudget e orderCount/ordersCount saem duplicados enquanto o front
-    // não migra para um só nome (veja docs/api-contract.md).
     return contracts.map((c) => {
       const totalBudget = Number(c.totalBudget);
-      const usedBudget = c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
-      const remainingBudget = Math.max(0, totalBudget - usedBudget);
-      const percentage = totalBudget > 0 ? (usedBudget / totalBudget) * 100 : 0;
+      const totalSpent = c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
+      const remainingBudget = Math.max(0, totalBudget - totalSpent);
+      const percentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
       return {
         contractId: c.id,
@@ -117,12 +114,10 @@ export class DashboardService {
         categoryColor: c.category?.color ?? null,
         categoryRegionalName: c.category?.regional?.name ?? null,
         totalBudget,
-        usedBudget,
-        totalSpent: usedBudget,
+        totalSpent,
         remainingBudget,
         percentage,
         budgetLocked: c.budgetLocked,
-        orderCount: c.orders.length,
         ordersCount: c.orders.length,
       };
     });
@@ -157,10 +152,7 @@ export class DashboardService {
       return {
         month,
         monthLabel,
-        total: data.totalSpent,
         totalSpent: data.totalSpent,
-        totalValue: data.totalSpent,
-        orderCount: data.ordersCount,
         ordersCount: data.ordersCount,
       };
     });
@@ -188,24 +180,22 @@ export class DashboardService {
     return categories.map((cat) => {
       let totalSpent = 0;
       let totalBudget = 0;
-      let orderCount = 0;
+      let ordersCount = 0;
 
       for (const c of cat.contracts) {
         totalBudget += Number(c.totalBudget);
         totalSpent += c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
-        orderCount += c.orders.length;
+        ordersCount += c.orders.length;
       }
 
       return {
         categoryId: cat.id,
         categoryName: cat.name,
-        category: cat.name,
         categoryRegionalName: cat.regional?.name ?? null,
         color: cat.color || "#3B82F6",
         totalBudget,
         totalSpent,
-        total: totalSpent,
-        orderCount,
+        ordersCount,
         percentage: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
       };
     });
@@ -299,9 +289,7 @@ export class DashboardService {
         productCode: p.productCode,
         category: p.category,
         totalQuantity: p.quantity,
-        quantity: p.quantity,
         totalSpent: p.totalSpent,
-        totalValue: p.totalSpent,
         contractCount: p.contracts.size,
       }));
 
@@ -309,13 +297,10 @@ export class DashboardService {
       .sort((a, b) => b.totalSpent - a.totalSpent)
       .slice(0, 10)
       .map((s) => ({
-        supplier: s.supplierName,
         supplierName: s.supplierName,
         totalSpent: s.totalSpent,
-        totalValue: s.totalSpent,
         totalQuantity: s.totalQuantity,
         ordersCount: s.ordersCount,
-        orderCount: s.ordersCount,
       }));
 
     return { topProducts, topSuppliers };
