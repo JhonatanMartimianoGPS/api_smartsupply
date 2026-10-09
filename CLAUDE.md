@@ -66,8 +66,8 @@ A regra completa e a situação de cada recurso estão em `docs/api-contract.md`
 - **Resposta**: toda chave é o nome do campo do modelo Prisma em **snake_case** (`created_by_id`, `total_amount`); relação vira objeto com o nome em snake_case. **Entrada**: o cliente envia snake_case.
 - Isso é mecânico: `router.use(apiConvention)` (depois do `authenticate`) traduz entrada e saída. Schemas Zod e services usam os nomes do modelo em camelCase; não escreva formatadores "transitórios" nem devolva duas grafias da mesma chave.
 - Campo calculado (`competence_month`, `items_count`) também é snake_case e vai para a tabela do contrato.
-- Recursos marcados como `migrar` no contrato ainda estão no formato antigo; ao tocar neles, ligue o `apiConvention`, remova as duplicatas e ajuste `client_smartsupply/src/types/` no mesmo dia (não há erro de tipo entre os repositórios; o teste de contrato em `src/__tests__/` é a trava).
-- Query params ficam como estão até o fechamento da convenção.
+- Todo router liga o `apiConvention` logo após o `authenticate` (só `/stock/*` fica fora). Ao mudar o que uma rota devolve, ajuste `client_smartsupply/src/types/` no mesmo dia e o teste de contrato em `src/__tests__/contract.<recurso>.test.ts` (não há erro de tipo entre os repositórios; o teste é a trava).
+- Query params também em snake_case (`?contract_id=`); o middleware ainda aceita camelCase enquanto o front migra.
 
 ## Regras de negócio e acesso (no lugar de RLS e triggers)
 

@@ -105,4 +105,15 @@ describe("contrato: pedidos", () => {
     assert.equal(removed.status, 200);
     assertHasKeys(removed.data, ["order_id"], "resultado da exclusão");
   });
+
+  it("query params em snake_case (camelCase ainda aceito)", async () => {
+    const all = await api(token, "GET", "/orders");
+    const contractId = all.data[0]?.contract_id;
+    assert.ok(contractId, "sem pedidos para filtrar");
+    const snake = await api(token, "GET", `/orders?contract_id=${contractId}`);
+    const camel = await api(token, "GET", `/orders?contractId=${contractId}`);
+    assert.equal(snake.status, 200);
+    assert.ok(snake.data.length > 0 && snake.data.every((o: any) => o.contract_id === contractId), "filtro por contract_id");
+    assert.deepEqual(snake.data.map((o: any) => o.id), camel.data.map((o: any) => o.id), "as duas grafias filtram igual");
+  });
 });

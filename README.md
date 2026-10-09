@@ -109,7 +109,11 @@ curl -i -X POST http://localhost:3000/users \
 
 In Windows PowerShell, use `curl.exe` instead of `curl`, or test with Insomnia or Postman, because of quoting rules.
 
-Errors always return `{"error": "message"}`: `400` for invalid data or an invalid `:id` (must be a UUID), `404` for a record not found and `409` for a duplicate email.
+The table above is only an example; the real routes live in `src/routes/` (Swagger at `/api-docs`).
+
+## API format (contract)
+
+Every response key is the Prisma field name in snake_case (`created_by_id`, `total_amount`); request bodies and query params are snake_case too. The `apiConvention` middleware does the translation, so schemas and services keep the camelCase model names. Errors always return `{"status_code": 400, "message": "...", "error": "Bad Request"}` (validation errors also carry `details`). Full rule, computed fields and status per resource: `docs/api-contract.md`.
 
 ## Folder structure
 

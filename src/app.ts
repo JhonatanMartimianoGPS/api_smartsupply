@@ -74,10 +74,11 @@ const generalLimiter = rateLimit({
 });
 app.use(generalLimiter);
 
-// 8. Rate Limiting estrito para proteção de força bruta em autenticação (15 tentativas / 15min)
+// 8. Rate Limiting estrito para proteção de força bruta em autenticação (15 tentativas / 15min).
+// AUTH_RATE_LIMIT_MAX só existe para rodar a suíte de testes várias vezes no ambiente local.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

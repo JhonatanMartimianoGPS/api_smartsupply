@@ -11,13 +11,13 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 - `Decimal` vira número, `Date` vira texto ISO. Colunas JSON livres (`details`, `metadata`, `items_payload`, `diff_before`, `diff_after`, `permissions`) são devolvidas como foram gravadas.
 - **Campos calculados** (não existem no modelo) também ficam em snake_case, são montados no service e **precisam estar listados abaixo**, por recurso.
 - **Nunca duas grafias da mesma chave** na mesma resposta.
-- Query params (`?periodMonth=`) ficam como estão por enquanto; migram no fechamento da convenção.
+- **Query params** também em snake_case (`?contract_id=`, `?period_month=`). O middleware converte para camelCase antes do controller e **ainda aceita camelCase** (`?contractId=`) enquanto o front migra.
 - **Erro**: toda resposta de erro é `{ status_code, message, error }`; erro de validação (400) traz também `details` (as issues do Zod, sem conversão). O cliente mostra só `message`.
 
 ### Como funciona no código
 
 - `src/lib/serialize.ts`: `serialize()` traduz a resposta; `toCamelCase()` traduz o corpo de entrada. Ambos mecânicos.
-- `src/middlewares/convention.middleware.ts`: `apiConvention` faz as duas coisas num router (`router.use(apiConvention)` logo após `authenticate`). Vai sendo ligado recurso a recurso; no fim vale para a API inteira.
+- `src/middlewares/convention.middleware.ts`: `apiConvention` faz as três coisas (corpo, query e resposta) num router (`router.use(apiConvention)` logo após `authenticate`). Está ligado em **todos os routers, menos `/stock/*`**; todo router novo liga também.
 - Schemas Zod e services continuam com os **nomes do modelo em camelCase**: o middleware converte antes deles. A mensagem de erro de validação mostra o nome em snake_case, como o cliente enviou.
 - O frontend lê e envia exatamente estes nomes em `src/types/` e `src/api/`. Como não há checagem de tipo entre os repositórios, o teste de contrato (abaixo) é a trava.
 
@@ -48,23 +48,35 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 | Recurso | Rotas | Situação |
 | --- | --- | --- |
 | Regionais | `/regionals` | ok |
-| Auth | `/auth/*` | ok na API, front a conferir |
-| Equipe | `/system/team-members` | API ok; **front migrar** (`full_name`, `role_label`, `role_title`, `photo_url`, `is_active`) |
-| Módulos e categorias de módulos | `/system/modules`, `/system/module-categories` | migrar: a API emite o formato que o front lê (`is_enabled`, `route`, `badge`, `label`, `sort_order`), marcado como transitório |
-| Presença | `/system/presence/*` | API ok; front migrar |
+| Auth | `/auth/*` | ok (`access_token`, `refresh_token`, `user` no formato de `/users`) |
+| Usuários | `/users` | ok |
+| Equipe | `/system/team-members` | API ok; **front migrar** (`full_name`, `role_label`, `role_title`, `photo_url`, `is_active`), baixa prioridade |
+| Módulos e categorias de módulos | `/system/modules`, `/system/module-categories` | ok |
+| Presença | `/system/presence/*` | API ok; **front migrar**, baixa prioridade |
 | Perfis de acesso, IA, governança | `/system/roles`, `/system/ai/*`, `/system/governance/*` | sem backend ainda |
-| Dashboard | `/dashboard/*` | API ok; front migrar (`totalValue` → `totalSpent`, etc.) |
-| Solicitações | `/solicitations` | migrar: a API emite os dois nomes (`solicitation_items`, `created_at`, `user_profile`, `unit_price`), transitório |
-| Chamados | `/tickets/*` | migrar (campos duplicados) |
-| Mural | `/feed/*` | API ok (`{ items, total, page, page_size, total_pages }`, autor em `user`, `likes_count`, `comments_count`, `has_liked`); **front migrar** (`user_profile`, `is_pinned`, `comment_count`, `totalCount`) |
-| Fornecedores | `/suppliers` | migrar |
-| Usuários | `/users` | migrar |
+| Dashboard | `/dashboard/*` | ok |
+| Contratos e orçamento | `/contracts/*` | ok |
+| Produtos, categorias e fornecedores | `/products/*`, `/categories`, `/suppliers` | ok |
 | Pedidos | `/orders/*` | ok |
-| Contratos e orçamento | `/contracts/*` | migrar (campos duplicados) |
-| Produtos | `/products/*` | migrar (listagem devolve `{items,total}` e `{products,totalCount}`; cadastro recebe `{product, categoryIds}`) |
+| Solicitações | `/solicitations` | ok |
+| Chamados | `/tickets/*` | ok (tipos e fluxos só leitura; o CRUD deles ainda não tem backend) |
 | Notificações | `/notifications` | ok |
-| Estoque | `/stock/*` | exceção (snake_case) |
+| Mural | `/feed/*` | API ok; **front migrar** (`user_profile`, `is_pinned`, `comment_count`, `totalCount`), baixa prioridade |
+| Estoque | `/stock/*` | exceção: formato do WMS (já snake_case), sem `apiConvention` |
+
+## Pendências conhecidas (fora da convenção de nomes)
+
+Não são problema de grafia, e sim de funcionalidade; ficam registradas aqui para não serem confundidas com o contrato:
+
+- **Relatos de problemas** (`/orders/issue-reports`): o front envia contrato, categoria e severidade (modelo antigo do Supabase); a API guarda só `order_id` e `description`, com status `aberto/em_analise/resolvido` (o front compara com `open/in_review/resolved`). Precisa de decisão de modelo.
+- `/auth/register` e `/auth/reset-password` ("esqueci minha senha"): o front chama, a API não tem.
+- `/orders/items/batch`: o front chama, a API não tem (`/orders/items/query` cobre o caso).
+- Assistente de IA (`/system/assistant`): sem backend; o front já lê o último pedido histórico com os nomes do contrato.
+- Query params do front ainda em camelCase (`?contractId=`): funcionam pela tolerância do middleware; migrar com calma.
 
 ## Teste de contrato
 
 `src/__tests__/contract.<recurso>.test.ts` (roda com `npm test`, com a API local no ar): para cada rota, confere que toda chave da resposta está em snake_case (`assertSnakeKeys`) e que as chaves que o frontend lê existem (`assertHasKeys`). Apoio em `src/__tests__/helpers/api.ts`. Se alguém mudar um lado e esquecer o outro, o teste falha.
+
+
+Cada arquivo faz um login; o limitador de login permite 15 por IP a cada 15 min. Para rodar `npm test` mais de uma vez seguida, defina `AUTH_RATE_LIMIT_MAX=200` no `.env` local (ou reinicie a API, que zera o contador).

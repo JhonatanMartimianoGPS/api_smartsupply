@@ -15,8 +15,12 @@ async function postLogin(email: string, password: string) {
 
 // Contrato de autenticação e do envelope de erro (docs/api-contract.md)
 describe("contrato: autenticação e erros", () => {
+  // Um login só para os dois testes: o limitador permite 15 por IP a cada 15 min
+  let token = "";
+
   it("login, me e refresh em snake_case", async () => {
     const login = await postLogin("admin@gpssa.com.br", "admin123");
+    token = login.data.access_token;
     assert.equal(login.status, 200, JSON.stringify(login.data));
     assertSnakeKeys(login.data);
     assertHasKeys(login.data, ["access_token", "refresh_token", "user"], "login");
@@ -53,7 +57,6 @@ describe("contrato: autenticação e erros", () => {
     assert.equal(unauth.status, 401);
     assert.equal(unauth.data.status_code, 401);
 
-    const token = (await postLogin("admin@gpssa.com.br", "admin123")).data.access_token;
     const missing = await api(token, "GET", "/orders/00000000-0000-0000-0000-000000000000");
     assert.equal(missing.status, 404);
     assertHasKeys(missing.data, ["status_code", "message", "error"], "erro 404");
