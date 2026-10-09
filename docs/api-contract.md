@@ -2,37 +2,47 @@
 
 Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os dois repositórios são separados e **não há checagem de tipo entre eles**: se um lado muda um nome e o outro não, a tela quebra sem aviso. Por isso a regra abaixo é única e simples.
 
-## Regra
+## Regra (decidida em 2026-10-08, opção B)
 
-**Status**: vale para **código novo**. A migração dos recursos existentes é gradual e sem prazo: primeiro o sistema funciona, depois padronizamos (tabela de situação abaixo). Enquanto isso, quando uma tela quebrar por nome de campo, a correção mínima é adaptar essa tela, sem mexer no resto.
+> **Na resposta, toda chave é o nome do campo do modelo Prisma (`prisma/schema/`) em snake_case.**
+> **No corpo de entrada, o cliente envia snake_case.**
 
-> **O nome do campo no JSON é o nome do campo no modelo Prisma (`prisma/schema/`), em camelCase, na resposta e no corpo enviado.**
+- `createdById` → `created_by_id`; relação `createdBy` → objeto `created_by`; `totalAmount` → `total_amount`.
+- `Decimal` vira número, `Date` vira texto ISO. Colunas JSON livres (`details`, `metadata`, `items_payload`, `diff_before`, `diff_after`, `permissions`) são devolvidas como foram gravadas.
+- **Campos calculados** (não existem no modelo) também ficam em snake_case, são montados no service e **precisam estar listados abaixo**, por recurso.
+- **Nunca duas grafias da mesma chave** na mesma resposta.
+- Query params (`?periodMonth=`) ficam como estão por enquanto; migram no fechamento da convenção.
 
-- Banco: `avatar_url` → Prisma: `avatarUrl` → JSON: `avatarUrl`.
-- Relações viram objeto aninhado com a mesma regra (`order.contract.regional.name`).
-- O service devolve o objeto do Prisma. Para esconder campo sensível, use `select` (nunca `passwordHash`).
-- **Não crie campo duplicado** (`regionalId` e `regional_id` juntos). Foi o que mascarou as divergências até agora.
-- Datas em ISO 8601, valores monetários como número.
-- O `period_month` de orçamento é a exceção de formato já conhecida: `YYYY-MM-01` (data), porque o front compara datas.
+### Como funciona no código
 
-## Campos calculados
+- `src/lib/serialize.ts`: `serialize()` traduz a resposta; `toCamelCase()` traduz o corpo de entrada. Ambos mecânicos.
+- `src/middlewares/convention.middleware.ts`: `apiConvention` faz as duas coisas num router (`router.use(apiConvention)` logo após `authenticate`). Vai sendo ligado recurso a recurso; no fim vale para a API inteira.
+- Schemas Zod e services continuam com os **nomes do modelo em camelCase**: o middleware converte antes deles. A mensagem de erro de validação mostra o nome em snake_case, como o cliente enviou.
+- O frontend lê e envia exatamente estes nomes em `src/types/` e `src/api/`. Como não há checagem de tipo entre os repositórios, o teste de contrato (abaixo) é a trava.
 
-Não existem no Prisma, então ficam em camelCase e **precisam estar listados abaixo**: `itemsCount`, `total`, `categoryName`, `contractName`, `regionalName`, `totalAmount` (pedido), `hasLiked`, `likesCount`, `commentsCount`, `counts` (chamado).
+### Campos calculados por recurso
+
+| Recurso | Campos calculados |
+| --- | --- |
+| Pedidos | `competence_month` (`AAAA-MM-01`), `items_count` |
+| Chamados | `counts` (mensagens, etapas, anexos, produtos), `total_price` no produto do chamado |
+| Dashboard | todos (agregações) |
+| Validação de rascunho | todos (`exists_in_catalog`, `available_for_contract`, …) |
 
 ## Exceção: estoque (WMS)
 
-`/stock/*` continua em **snake_case**, no formato do modelo WMS (`produto_id`, `custo_unitario`...). Os tipos do front ficam em `src/types/stockWms.ts`. Convertê-lo agora teria custo alto e nenhum ganho. Reavaliar quando o modelo de estoque for revisto.
+`/stock/*` continua no formato do modelo WMS (já é snake_case). Reavaliar quando o modelo de estoque for revisto.
 
 ## Como mudar um campo
 
 1. Altere o schema (`/schema-change`) e a migration.
-2. Atualize o tipo em `client_smartsupply/src/types/` **no mesmo dia**.
-3. Rode `npx tsc --noEmit` nos dois repositórios.
-4. Atualize a tabela de situação abaixo.
+2. Atualize o tipo em `client_smartsupply/src/types/` **no mesmo dia**, com o nome em snake_case.
+3. Rode `npx tsc --noEmit` nos dois repositórios e `npm test` na API (testes de contrato).
+4. Se for campo calculado, liste na tabela acima.
 
 ## Situação por recurso
 
-`ok` = só camelCase, igual ao modelo. `migrar` = ainda emite snake_case ou campos duplicados, ou o front lê snake_case.
+`ok` = router com `apiConvention`, sem chave duplicada, front lendo os nomes do modelo em snake_case. `migrar` = ainda no formato antigo (camelCase do Prisma, duas grafias ou nomes do Supabase). Ordem de migração: dashboard, sistema/usuários, contratos, produtos, solicitações, chamados, pedidos, notificações, auth, feed/equipe.
 
 | Recurso | Rotas | Situação |
 | --- | --- | --- |
@@ -56,4 +66,4 @@ Não existem no Prisma, então ficam em camelCase e **precisam estar listados ab
 
 ## Teste de contrato
 
-A comparação entre os tipos do front e as respostas reais da API será um teste do repositório, para falhar quando um lado mudar sem o outro. (A fazer.)
+`src/__tests__/contract.<recurso>.test.ts` (roda com `npm test`, com a API local no ar): para cada rota, confere que toda chave da resposta está em snake_case (`assertSnakeKeys`) e que as chaves que o frontend lê existem (`assertHasKeys`). Apoio em `src/__tests__/helpers/api.ts`. Se alguém mudar um lado e esquecer o outro, o teste falha.

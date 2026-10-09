@@ -63,11 +63,11 @@ Padrão do código (copie de `regional.*`):
 
 A regra completa e a situação de cada recurso estão em `docs/api-contract.md`. Resumo:
 
-- O nome do campo no JSON é o nome do campo no **modelo Prisma, em camelCase**, na resposta e no corpo (`avatarUrl`, `regionalId`).
-- **Não crie campo duplicado** (`regionalId` e `regional_id` juntos) e não renomeie campo sem atualizar o tipo no `client_smartsupply` no mesmo dia: não há erro de tipo entre os dois repositórios.
-- Exceção: `/stock/*` segue em snake_case (modelo do WMS).
-- A regra vale para código novo. Recursos marcados como `migrar` em `docs/api-contract.md` emitem formato antigo e serão migrados aos poucos; só migre um recurso existente se isso for o pedido, para não ampliar o escopo.
-- O frontend ainda envia alguns formatos antigos (por exemplo, produto como `{ product: {...}, categoryIds }`). Quando for assim, traduza no controller e marque como **transitório**.
+- **Resposta**: toda chave é o nome do campo do modelo Prisma em **snake_case** (`created_by_id`, `total_amount`); relação vira objeto com o nome em snake_case. **Entrada**: o cliente envia snake_case.
+- Isso é mecânico: `router.use(apiConvention)` (depois do `authenticate`) traduz entrada e saída. Schemas Zod e services usam os nomes do modelo em camelCase; não escreva formatadores "transitórios" nem devolva duas grafias da mesma chave.
+- Campo calculado (`competence_month`, `items_count`) também é snake_case e vai para a tabela do contrato.
+- Recursos marcados como `migrar` no contrato ainda estão no formato antigo; ao tocar neles, ligue o `apiConvention`, remova as duplicatas e ajuste `client_smartsupply/src/types/` no mesmo dia (não há erro de tipo entre os repositórios; o teste de contrato em `src/__tests__/` é a trava).
+- Query params ficam como estão até o fechamento da convenção.
 
 ## Regras de negócio e acesso (no lugar de RLS e triggers)
 
