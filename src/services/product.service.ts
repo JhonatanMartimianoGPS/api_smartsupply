@@ -1,5 +1,26 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import type { AccessUser } from "./access.service.js";
+
+// Texto comparável de código/nome: sem espaços duplicados e sem diferença de maiúsculas
+const normalizeText = (value: string | null | undefined) => value?.trim().replace(/\s+/g, " ").toUpperCase() ?? "";
+
+// Campos do produto guardados no histórico (como o snapshot do trigger do Supabase)
+function productSnapshot(p: any) {
+  return {
+    id: p.id,
+    codigo: p.codigo,
+    name: p.name,
+    descricao: p.descricao,
+    unidade: p.unidade,
+    tabela: Number(p.tabela),
+    product_category_id: p.categoryId,
+    regional_id: p.regionalId,
+    supplier_id: p.supplierId,
+    image_url: p.imageUrl,
+    active: p.active,
+  };
+}
 
 export class ProductService {
   /**
@@ -275,7 +296,7 @@ export class ProductService {
   /**
    * Cadastra novo produto
    */
-  async createProduct(data: {
+  async createProduct(user: AccessUser, data: {
     name: string;
     codigo?: string;
     descricao?: string;
@@ -308,6 +329,7 @@ export class ProductService {
         supplier: true,
       },
     });
+    await this.recordHistory("created", product, user.userId, { snapshot: productSnapshot(product) });
 
     return {
       id: product.id,
@@ -326,6 +348,7 @@ export class ProductService {
    * Atualiza produto
    */
   async updateProduct(
+    user: AccessUser,
     id: string,
     data: {
       name?: string;
@@ -365,6 +388,7 @@ export class ProductService {
         supplier: true,
       },
     });
+    await this.recordChange(user.userId, existing, updated);
 
     return {
       id: updated.id,
@@ -382,25 +406,300 @@ export class ProductService {
   /**
    * Exclusão / Desativação de produto
    */
-  async deleteProduct(id: string) {
-    const existing = await prisma.product.findUnique({
-      where: { id },
-      include: { orderItems: true },
-    });
+  async deleteProduct(user: AccessUser, id: string) {
+    const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError(404, "Produto não encontrado.");
     }
 
-    if (existing.orderItems.length > 0) {
-      await prisma.product.update({
+    // Produto que já entrou em pedido não some: só é desativado (os pedidos antigos continuam íntegros)
+    const usedInOrders = await prisma.orderItem.count({ where: { productId: id } });
+    if (usedInOrders > 0) {
+      const updated = await prisma.product.update({
         where: { id },
         data: { active: false },
       });
+      await this.recordChange(user.userId, existing, updated);
       return { id, deactivated: true };
     }
 
+    // O histórico do produto é apagado junto (chave estrangeira em cascata), como no modelo atual
     await prisma.product.delete({ where: { id } });
     return { id, deleted: true };
+  }
+
+  // ─── Histórico ──────────────────────────────────────────────────────────────
+  private async recordHistory(action: "created" | "updated", product: any, userId: string, details: any) {
+    await prisma.productHistory.create({
+      data: { productId: product.id, userId, action, details },
+    });
+  }
+
+  /** Grava "updated" com os campos que mudaram (changed_fields é o que a tela de histórico mostra). */
+  private async recordChange(userId: string, before: any, after: any) {
+    const prev = productSnapshot(before);
+    const next = productSnapshot(after);
+    const changedFields = Object.keys(next).filter((k) => (prev as any)[k] !== (next as any)[k]);
+    if (changedFields.length === 0) return;
+    await this.recordHistory("updated", after, userId, { before: prev, after: next, changed_fields: changedFields });
+  }
+
+  /**
+   * Histórico de alterações do catálogo, no formato que a tela lê. Sem a migration do histórico,
+   * produtos excluídos levam o histórico junto; o filtro por regional usa a regional atual do produto.
+   */
+  async getHistory(params: { productId?: string; regionalId?: string; limit?: number }) {
+    const take = Math.min(Math.max(1, Math.floor(Number(params.limit)) || 100), 500);
+    const where: any = {};
+    if (params.productId) where.productId = params.productId;
+    if (params.regionalId) where.product = { regionalId: params.regionalId };
+
+    const entries = await prisma.productHistory.findMany({
+      where,
+      include: { product: { select: { codigo: true, name: true, regionalId: true } } },
+      orderBy: { createdAt: "desc" },
+      take,
+    });
+    const userIds = [...new Set(entries.map((e) => e.userId).filter((u): u is string => Boolean(u)))];
+    const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : [];
+    const names = new Map(users.map((u) => [u.id, u.name]));
+
+    return entries.map((e) => {
+      const details: any = e.details ?? {};
+      const snap = details.after ?? details.snapshot ?? {};
+      return {
+        id: e.id,
+        product_id: e.productId,
+        regional_id: e.product?.regionalId ?? snap.regional_id ?? null,
+        actor_user_id: e.userId,
+        action: e.action,
+        product_codigo: e.product?.codigo ?? snap.codigo ?? null,
+        product_name: e.product?.name ?? snap.name ?? null,
+        details: e.details,
+        created_at: e.createdAt.toISOString(),
+        actor_profile: e.userId ? { full_name: names.get(e.userId) ?? "Usuário" } : undefined,
+      };
+    });
+  }
+
+  // ─── Import de planilha ─────────────────────────────────────────────────────
+  /** Produtos ativos da regional (e os globais), com o nome do fornecedor, para casar com a planilha. */
+  private async catalogForImport(regionalId?: string | null) {
+    return prisma.product.findMany({
+      where: {
+        active: true,
+        codigo: { not: null },
+        ...(regionalId ? { OR: [{ regionalId }, { regionalId: null }] } : {}),
+      },
+      select: { id: true, codigo: true, tabela: true, supplier: { select: { name: true } } },
+    });
+  }
+
+  /** Para cada linha da planilha, os produtos existentes com o mesmo código (a tela decide pelo fornecedor). */
+  async importLookup(rows: { lookupIndex: number; codigo: string }[], regionalId?: string | null) {
+    if (rows.length === 0) return {};
+    const catalog = await this.catalogForImport(regionalId);
+    const byCode = new Map<string, { id: string; codigo: string; tabela: number; fornecedor: string | null }[]>();
+    for (const p of catalog) {
+      const key = normalizeText(p.codigo);
+      const list = byCode.get(key) ?? [];
+      list.push({ id: p.id, codigo: p.codigo ?? "", tabela: Number(p.tabela), fornecedor: p.supplier?.name ?? null });
+      byCode.set(key, list);
+    }
+    const result: Record<number, unknown[]> = {};
+    for (const row of rows) {
+      result[row.lookupIndex] = byCode.get(normalizeText(row.codigo)) ?? [];
+    }
+    return result;
+  }
+
+  /** Quantos produtos já existem com cada código (na regional), para avisar duplicidade no import. */
+  async importDuplicateLookup(codes: string[], regionalId?: string | null) {
+    if (codes.length === 0) return {};
+    const catalog = await this.catalogForImport(regionalId);
+    const counts = new Map<string, number>();
+    for (const p of catalog) {
+      const key = normalizeText(p.codigo);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    // Chave pelo código como veio e pela forma normalizada (a tela usa a normalizada)
+    const result: Record<string, number> = {};
+    for (const code of codes) {
+      const n = counts.get(normalizeText(code)) ?? 0;
+      result[code] = n;
+      result[normalizeText(code)] = n;
+    }
+    return result;
+  }
+
+  // ─── Disponibilidade (modelo atual: produto é da regional; categorias ligadas por vínculo) ───
+  /** Categorias de contrato em que o produto entra: as ligadas à categoria de produto dele. */
+  async getCategoryMap(productIds?: string[]) {
+    const products = await prisma.product.findMany({
+      where: productIds ? { id: { in: productIds } } : { active: true },
+      select: { id: true, categoryId: true },
+    });
+    const categoryIds = [...new Set(products.map((p) => p.categoryId).filter((c): c is string => Boolean(c)))];
+    const links = categoryIds.length
+      ? await prisma.contractCategoryProductCategoryLink.findMany({ where: { productCategoryId: { in: categoryIds } } })
+      : [];
+    const byProductCategory = new Map<string, string[]>();
+    for (const l of links) {
+      const list = byProductCategory.get(l.productCategoryId) ?? [];
+      list.push(l.contractCategoryId);
+      byProductCategory.set(l.productCategoryId, list);
+    }
+    const map: Record<string, string[]> = {};
+    for (const p of products) {
+      map[p.id] = p.categoryId ? (byProductCategory.get(p.categoryId) ?? []) : [];
+    }
+    return map;
+  }
+
+  async getProductContractCategoryIds(productId: string) {
+    const map = await this.getCategoryMap([productId]);
+    if (!(productId in map)) {
+      throw new AppError(404, "Produto não encontrado.");
+    }
+    return map[productId];
+  }
+
+  /** Contratos em que o produto entra: os ativos da regional dele; produto global entra em todos. */
+  async getContractMap(productIds?: string[]) {
+    const products = await prisma.product.findMany({
+      where: productIds ? { id: { in: productIds } } : { active: true },
+      select: { id: true, regionalId: true },
+    });
+    const contracts = await prisma.contract.findMany({ where: { active: true }, select: { id: true, regionalId: true } });
+    const byRegional = new Map<string, string[]>();
+    for (const c of contracts) {
+      const list = byRegional.get(c.regionalId) ?? [];
+      list.push(c.id);
+      byRegional.set(c.regionalId, list);
+    }
+    const all = contracts.map((c) => c.id);
+    const map: Record<string, string[]> = {};
+    for (const p of products) {
+      map[p.id] = p.regionalId ? (byRegional.get(p.regionalId) ?? []) : all;
+    }
+    return map;
+  }
+
+  async getContractCategoryLinks(contractCategoryIds: string[], productCategoryIds: string[]) {
+    if (contractCategoryIds.length === 0 || productCategoryIds.length === 0) return [];
+    const links = await prisma.contractCategoryProductCategoryLink.findMany({
+      where: { contractCategoryId: { in: contractCategoryIds }, productCategoryId: { in: productCategoryIds } },
+    });
+    return links.map((l) => ({
+      id: l.id,
+      contract_category_id: l.contractCategoryId,
+      product_category_id: l.productCategoryId,
+      created_at: l.createdAt.toISOString(),
+    }));
+  }
+
+  private async findLinkPair(contractCategoryId: string, productCategoryId: string) {
+    const [contractCategory, productCategory] = await Promise.all([
+      prisma.contractCategory.findUnique({ where: { id: contractCategoryId }, select: { id: true } }),
+      prisma.productCategory.findUnique({ where: { id: productCategoryId }, select: { id: true, name: true } }),
+    ]);
+    if (!contractCategory || !productCategory) {
+      throw new AppError(404, "Categoria de contrato ou categoria de produto não encontrada.");
+    }
+    const affectedProducts = await prisma.product.count({ where: { categoryId: productCategoryId, active: true } });
+    return { productCategory, affectedProducts };
+  }
+
+  /** Vincula uma categoria de produto a uma categoria de contrato (vale para todos os produtos dela). */
+  async bulkAssignContractCategory(contractCategoryId: string, productCategoryId: string) {
+    const { productCategory, affectedProducts } = await this.findLinkPair(contractCategoryId, productCategoryId);
+    const existing = await prisma.contractCategoryProductCategoryLink.findUnique({
+      where: { contractCategoryId_productCategoryId: { contractCategoryId, productCategoryId } },
+    });
+    if (!existing) {
+      await prisma.contractCategoryProductCategoryLink.create({ data: { contractCategoryId, productCategoryId } });
+    }
+    return {
+      mappingCreated: !existing,
+      affectedProducts,
+      insertedAvailability: existing ? 0 : affectedProducts,
+      productCategoryName: productCategory.name,
+    };
+  }
+
+  async bulkRemoveContractCategory(contractCategoryId: string, productCategoryId: string) {
+    const { productCategory, affectedProducts } = await this.findLinkPair(contractCategoryId, productCategoryId);
+    const removed = await prisma.contractCategoryProductCategoryLink.deleteMany({ where: { contractCategoryId, productCategoryId } });
+    return {
+      affectedProducts,
+      removedAvailability: removed.count > 0 ? affectedProducts : 0,
+      productCategoryName: productCategory.name,
+    };
+  }
+
+  /**
+   * Define quais produtos pertencem a uma categoria de produto: os informados entram nela; os que
+   * estavam nela e não foram informados vão para a categoria de destino (ou ficam sem categoria).
+   */
+  async syncProductsForCategory(
+    user: AccessUser,
+    categoryId: string,
+    data: { productIds: string[]; regionalId?: string | null; fallbackCategoryId?: string | null },
+  ) {
+    const category = await prisma.productCategory.findUnique({ where: { id: categoryId }, select: { id: true } });
+    if (!category) {
+      throw new AppError(404, "Categoria de produto não encontrada.");
+    }
+    if (data.fallbackCategoryId) {
+      if (data.fallbackCategoryId === categoryId) {
+        throw new AppError(400, "A categoria de destino precisa ser diferente da categoria editada.");
+      }
+      const fallback = await prisma.productCategory.count({ where: { id: data.fallbackCategoryId } });
+      if (fallback === 0) {
+        throw new AppError(400, "Categoria de destino não encontrada.");
+      }
+    }
+
+    const selected = new Set(data.productIds);
+    const regionalWhere = data.regionalId ? { OR: [{ regionalId: data.regionalId }, { regionalId: null }] } : {};
+    const [toAssign, toClear] = await Promise.all([
+      // Produto sem categoria também entra: "NOT categoryId" sozinho deixaria o NULL de fora
+      prisma.product.findMany({
+        where: { id: { in: data.productIds }, AND: [{ OR: [{ categoryId: null }, { NOT: { categoryId } }] }, regionalWhere] },
+      }),
+      prisma.product.findMany({ where: { categoryId, id: { notIn: data.productIds }, ...regionalWhere } }),
+    ]);
+
+    let historyEventsCount = 0;
+    await prisma.$transaction(async (tx) => {
+      for (const p of toAssign) {
+        const updated = await tx.product.update({ where: { id: p.id }, data: { categoryId } });
+        await tx.productHistory.create({
+          data: {
+            productId: p.id,
+            userId: user.userId,
+            action: "updated",
+            details: { before: productSnapshot(p), after: productSnapshot(updated), changed_fields: ["product_category_id"] },
+          },
+        });
+        historyEventsCount++;
+      }
+      for (const p of toClear) {
+        const updated = await tx.product.update({ where: { id: p.id }, data: { categoryId: data.fallbackCategoryId ?? null } });
+        await tx.productHistory.create({
+          data: {
+            productId: p.id,
+            userId: user.userId,
+            action: "updated",
+            details: { before: productSnapshot(p), after: productSnapshot(updated), changed_fields: ["product_category_id"] },
+          },
+        });
+        historyEventsCount++;
+      }
+    });
+
+    void selected;
+    return { updatedCount: toAssign.length, clearedCount: toClear.length, historyEventsCount };
   }
 
   /**
@@ -442,29 +741,35 @@ export class ProductService {
   /**
    * Índice de duplicidades
    */
-  async getDuplicateIndex() {
+  /**
+   * Produtos repetidos (mesmo código ou mesmo nome) dentro da mesma regional, no formato que a
+   * Tabela de Preços lê. O mesmo código em regionais diferentes não é duplicidade.
+   */
+  async getDuplicateIndex(mode: "codigo" | "nome" = "codigo") {
     const products = await prisma.product.findMany({
       where: { active: true },
-      select: { id: true, codigo: true, name: true },
+      select: { id: true, codigo: true, name: true, regionalId: true },
     });
 
-    const codeMap = new Map<string, string[]>();
+    const groups = new Map<string, string[]>();
     for (const p of products) {
-      if (p.codigo) {
-        const list = codeMap.get(p.codigo) || [];
-        list.push(p.id);
-        codeMap.set(p.codigo, list);
-      }
+      const value = normalizeText(mode === "nome" ? p.name : p.codigo);
+      if (!value) continue;
+      const key = `${p.regionalId ?? "global"}::${value}`;
+      const list = groups.get(key) ?? [];
+      list.push(p.id);
+      groups.set(key, list);
     }
 
-    const duplicates: Record<string, string[]> = {};
-    for (const [code, ids] of codeMap.entries()) {
-      if (ids.length > 1) {
-        duplicates[code] = ids;
-      }
+    const duplicateCountByProductId: Record<string, number> = {};
+    let duplicateGroupCount = 0;
+    for (const ids of groups.values()) {
+      if (ids.length < 2) continue;
+      duplicateGroupCount++;
+      for (const id of ids) duplicateCountByProductId[id] = ids.length;
     }
-
-    return duplicates;
+    const duplicateProductIds = Object.keys(duplicateCountByProductId);
+    return { duplicateProductIds, duplicateCountByProductId, duplicateGroupCount, duplicateProductCount: duplicateProductIds.length };
   }
 }
 

@@ -115,7 +115,7 @@ export class ProductController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const product = await productService.createProduct(toProductInput(req.body));
+      const product = await productService.createProduct(req.user!, toProductInput(req.body));
       res.status(201).json(product);
     } catch (error) {
       next(error);
@@ -124,7 +124,7 @@ export class ProductController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const product = await productService.updateProduct(req.params.id as string, toProductInput(req.body));
+      const product = await productService.updateProduct(req.user!, req.params.id as string, toProductInput(req.body));
       res.json(product);
     } catch (error) {
       next(error);
@@ -133,7 +133,7 @@ export class ProductController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await productService.deleteProduct(req.params.id as string);
+      const result = await productService.deleteProduct(req.user!, req.params.id as string);
       res.json(result);
     } catch (error) {
       next(error);
@@ -149,10 +149,89 @@ export class ProductController {
     }
   }
 
-  async getDuplicateIndex(_req: Request, res: Response, next: NextFunction) {
+  async getDuplicateIndex(req: Request, res: Response, next: NextFunction) {
     try {
-      const index = await productService.getDuplicateIndex();
+      const mode = asString(req.query.mode) === "nome" ? "nome" : "codigo";
+      const index = await productService.getDuplicateIndex(mode);
       res.json(index);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const limit = asString(req.query.limit);
+      const history = await productService.getHistory({
+        productId: asString(req.query.productId),
+        regionalId: asString(req.query.regionalId),
+        limit: limit ? Number(limit) : undefined,
+      });
+      res.json(history);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async importLookup(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.importLookup(req.body.rows, req.body.regionalId));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async importDuplicateLookup(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.importDuplicateLookup(req.body.codes, req.body.regionalId));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getProductCategories(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.getProductContractCategoryIds(req.params.id as string));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getCategoryMap(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.getCategoryMap(req.body.productIds));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getContractMap(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.getContractMap(req.body.productIds));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getContractCategoryLinks(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.getContractCategoryLinks(req.body.contractCategoryIds, req.body.productCategoryIds));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkAssignContractCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.bulkAssignContractCategory(req.body.contractCategoryId, req.body.productCategoryId));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkRemoveContractCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await productService.bulkRemoveContractCategory(req.body.contractCategoryId, req.body.productCategoryId));
     } catch (error) {
       next(error);
     }

@@ -239,6 +239,68 @@ export class ContractService {
   }
 
   /**
+   * Diagnóstico "por que o usuário não vê produtos neste contrato", no formato que a tela lê.
+   * Regra atual de disponibilidade: produto ativo da regional do contrato ou global.
+   */
+  async diagnoseProductAccess(user: AccessUser, contractId: string, targetUserId: string) {
+    const contract = await accessService.assertContractAccess(user, contractId);
+    if (typeof targetUserId !== "string" || !targetUserId) {
+      throw new AppError(400, "Usuário é obrigatório.");
+    }
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, role: true, regionals: { select: { regionalId: true } } },
+    });
+    if (!target) {
+      throw new AppError(404, "Usuário não encontrado.");
+    }
+
+    const targetAccess = { userId: target.id, role: target.role };
+    const [accessible, assignment, directCount, categoryCount] = await Promise.all([
+      prisma.contract.count({ where: { AND: [{ id: contractId }, accessService.contractFilter(targetAccess)] } }),
+      prisma.userContract.count({ where: { userId: target.id, contractId } }),
+      prisma.product.count({ where: { active: true, OR: [{ regionalId: contract.regionalId }, { regionalId: null }] } }),
+      contract.categoryId
+        ? prisma.product.count({
+            where: {
+              active: true,
+              OR: [{ regionalId: contract.regionalId }, { regionalId: null }],
+              category: { contractCategoryLinks: { some: { contractCategoryId: contract.categoryId } } },
+            },
+          })
+        : Promise.resolve(0),
+    ]);
+
+    const hasAccess = accessible > 0;
+    let code = "ok";
+    let message = "O usuário tem acesso ao contrato e há produtos disponíveis.";
+    if (!hasAccess) {
+      code = "no_contract_access";
+      message = "O usuário não tem acesso a este contrato (confira a regional e o vínculo com o contrato).";
+    } else if (directCount === 0) {
+      code = "no_products_for_regional";
+      message = "Não há produtos ativos cadastrados para a regional deste contrato.";
+    }
+
+    return {
+      user_id: target.id,
+      user_role: target.role,
+      user_regional_ids: target.regionals.map((r) => r.regionalId),
+      contract_id: contract.id,
+      contract_name: contract.name,
+      contract_regional_id: contract.regionalId,
+      contract_category_id: contract.categoryId,
+      has_contract_access: hasAccess,
+      assistant_assignment_exists: assignment > 0,
+      category_availability_count: categoryCount,
+      direct_contract_availability_count: directCount,
+      merged_product_count: directCount,
+      diagnosis_code: code,
+      diagnosis_message: message,
+    };
+  }
+
+  /**
    * Histórico de períodos orçamentários
    */
   async getBudgetHistory(user: AccessUser, contractId: string) {

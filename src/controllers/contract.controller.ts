@@ -132,6 +132,16 @@ export class ContractController {
     }
   }
 
+  async diagnoseProductAccess(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+      const result = await contractService.diagnoseProductAccess(req.user!, req.params.id as string, userId);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getLastHistoricalOrder(req: Request, res: Response, next: NextFunction) {
     try {
       const order = await contractService.getLastHistoricalOrder(req.user!, req.params.id as string);

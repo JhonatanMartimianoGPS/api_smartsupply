@@ -51,5 +51,8 @@ router.get("/:id/products", (req, res, next) =>
 router.get("/:id/last-historical-order", (req, res, next) =>
   contractController.getLastHistoricalOrder(req, res, next),
 );
+router.get("/:id/diagnose-product-access", authorize(["super_admin", "admin", "suprimentos"]), (req, res, next) =>
+  contractController.diagnoseProductAccess(req, res, next),
+);
 
 export const contractRoutes = router;
