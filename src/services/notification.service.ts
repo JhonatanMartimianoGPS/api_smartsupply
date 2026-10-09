@@ -49,28 +49,11 @@ function solicitationStatusLabel(status: string, step: string) {
 export class NotificationService {
   // ─── Leitura (o que o sino mostra) ──────────────────────────────────────────
   async listNotifications(userId: string) {
-    const list = await prisma.appNotification.findMany({
+    return prisma.appNotification.findMany({
       where: { userId },
       take: 50,
       orderBy: { createdAt: "desc" },
     });
-
-    return list.map((n) => ({
-      id: n.id,
-      user_id: n.userId,
-      ticket_id: n.ticketId,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      // O frontend lê link_url e read; link e is_read ficam por compatibilidade
-      link_url: n.link,
-      link: n.link,
-      read: n.isRead,
-      is_read: n.isRead,
-      // Os contadores de mensagens por chamado do frontend leem metadata.ticket_id
-      metadata: n.ticketId ? { ticket_id: n.ticketId } : null,
-      created_at: n.createdAt.toISOString(),
-    }));
   }
 
   async markAsRead(id: string, userId: string) {

@@ -61,7 +61,7 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 | Pedidos | `/orders/*` | ok |
 | Contratos e orçamento | `/contracts/*` | migrar (campos duplicados) |
 | Produtos | `/products/*` | migrar (listagem devolve `{items,total}` e `{products,totalCount}`; cadastro recebe `{product, categoryIds}`) |
-| Notificações | `/notifications` | migrar (`read`, `link_url`, `metadata`) |
+| Notificações | `/notifications` | ok |
 | Estoque | `/stock/*` | exceção (snake_case) |
 
 ## Teste de contrato
