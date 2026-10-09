@@ -56,7 +56,7 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 | Dashboard | `/dashboard/*` | API ok; front migrar (`totalValue` → `totalSpent`, etc.) |
 | Solicitações | `/solicitations` | migrar: a API emite os dois nomes (`solicitation_items`, `created_at`, `user_profile`, `unit_price`), transitório |
 | Chamados | `/tickets/*` | migrar (campos duplicados) |
-| Mural | `/feed/*` | migrar |
+| Mural | `/feed/*` | API ok (`{ items, total, page, page_size, total_pages }`, autor em `user`, `likes_count`, `comments_count`, `has_liked`); **front migrar** (`user_profile`, `is_pinned`, `comment_count`, `totalCount`) |
 | Fornecedores | `/suppliers` | migrar |
 | Usuários | `/users` | migrar |
 | Pedidos | `/orders/*` | ok |

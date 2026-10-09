@@ -49,7 +49,8 @@ export class FeedController {
 
   async togglePin(req: Request, res: Response, next: NextFunction) {
     try {
-      const post = await feedService.togglePin(req.params.id as string);
+      const userId = (req as any).user.userId;
+      const post = await feedService.togglePin(req.params.id as string, userId);
       res.json(post);
     } catch (error) {
       next(error);

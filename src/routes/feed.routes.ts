@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { feedController } from "../controllers/feed.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { storageService } from "../services/storage.service.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Upload de anexos para o feed
 router.post(
