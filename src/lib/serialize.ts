@@ -26,6 +26,12 @@ export function toCamelKey(key: string): string {
   return key.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
 }
 
+/** Marca um valor para sair exatamente como está (mapas cujas chaves são dados, como códigos de produto). */
+export class RawJson {
+  constructor(public readonly value: unknown) {}
+}
+export const raw = (value: unknown) => new RawJson(value);
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") return false;
   const proto = Object.getPrototypeOf(value);
@@ -34,6 +40,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function convert(value: unknown, keyFn: (key: string) => string): unknown {
   if (value === null || value === undefined) return value;
+  if (value instanceof RawJson) return value.value;
   if (value instanceof Date) return value.toISOString();
   if (Prisma.Decimal.isDecimal(value)) return Number(value);
   if (Array.isArray(value)) return value.map((item) => convert(item, keyFn));

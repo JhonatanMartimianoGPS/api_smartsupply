@@ -872,7 +872,6 @@ export class OrderService {
             unidade: it.product.unidade,
             categoria: it.productCategoriaSnapshot || "Geral",
             tabela: Number(it.product.tabela),
-            valor_unitario: Number(it.product.tabela),
             image_url: it.product.imageUrl,
             fornecedor: it.productFornecedorSnapshot || null,
           }
@@ -1277,8 +1276,7 @@ export class OrderService {
                   unidade: it.product.unidade,
                   categoria: it.productCategoriaSnapshot || "Geral",
                   tabela: Number(it.product.tabela),
-                  valor_unitario: Number(it.product.tabela),
-                  image_url: it.product.imageUrl,
+                        image_url: it.product.imageUrl,
                   fornecedor: it.productFornecedorSnapshot || null,
                 }
               : null,

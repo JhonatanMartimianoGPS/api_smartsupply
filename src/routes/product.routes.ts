@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { productController } from "../controllers/product.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { storageService } from "../services/storage.service.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import {
@@ -14,6 +15,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Upload de imagem do produto
 router.post(

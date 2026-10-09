@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { categoryController } from "../controllers/category.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { syncProductsForCategorySchema } from "../schemas/product.schema.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // ─── Categorias de Produto (/categories/products) ──────────────────────────
 router.get("/products", (req, res, next) =>

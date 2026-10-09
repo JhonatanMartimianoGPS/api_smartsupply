@@ -1,6 +1,24 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
 import type { AccessUser } from "./access.service.js";
+import { raw } from "../lib/serialize.js";
+
+// Relações que acompanham o produto nas respostas
+const PRODUCT_INCLUDE = {
+  category: true,
+  regional: true,
+  supplier: { select: { id: true, name: true, tradeName: true } },
+} as const;
+
+// Produto no contrato da API: o modelo (com category, regional e supplier) mais dois calculados
+// que as telas usam em toda parte: categoria (nome da categoria) e fornecedor (nome do fornecedor)
+function withProductExtras<T extends { category?: { name: string } | null; supplier?: { name: string; tradeName: string | null } | null }>(p: T) {
+  return {
+    ...p,
+    categoria: p.category?.name ?? "Geral",
+    fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
+  };
+}
 
 // Texto comparável de código/nome: sem espaços duplicados e sem diferença de maiúsculas
 const normalizeText = (value: string | null | undefined) => value?.trim().replace(/\s+/g, " ").toUpperCase() ?? "";
@@ -97,39 +115,11 @@ export class ProductService {
 
     const products = await prisma.product.findMany({
       where: and.length > 0 ? { AND: and } : {},
-      include: {
-        category: true,
-        regional: true,
-        supplier: true,
-      },
+      include: PRODUCT_INCLUDE,
       orderBy: { name: "asc" },
     });
 
-    return products.map((p) => ({
-      id: p.id,
-      codigo: p.codigo,
-      name: p.name,
-      descricao: p.descricao,
-      unidade: p.unidade,
-      tabela: Number(p.tabela),
-      valor_unitario: Number(p.tabela),
-      valorUnitario: Number(p.tabela),
-      categoria: p.category?.name || "Geral",
-      product_category_id: p.categoryId,
-      productCategoryId: p.categoryId,
-      product_category: p.category,
-      regional_id: p.regionalId,
-      regionalId: p.regionalId,
-      regional: p.regional,
-      supplier_id: p.supplierId,
-      fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
-      image_url: p.imageUrl,
-      fotoUrl: p.imageUrl,
-      active: p.active,
-      ativo: p.active,
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
-    }));
+    return products.map(withProductExtras);
   }
 
   /**
@@ -223,25 +213,7 @@ export class ProductService {
       }),
     ]);
 
-    const items = products.map((p) => ({
-      id: p.id,
-      codigo: p.codigo,
-      name: p.name,
-      descricao: p.descricao,
-      unidade: p.unidade,
-      tabela: Number(p.tabela),
-      valor_unitario: Number(p.tabela),
-      categoria: p.category?.name || "Geral",
-      product_category_id: p.categoryId,
-      product_category: p.category,
-      regional_id: p.regionalId,
-      regional: p.regional,
-      fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
-      image_url: p.imageUrl,
-      active: p.active,
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
-    }));
+    const items = products.map(withProductExtras);
 
     return {
       items,
@@ -249,9 +221,6 @@ export class ProductService {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
-      // Transitório: o frontend herdado do Supabase lê estes nomes (products e totalCount)
-      products: items,
-      totalCount: total,
     };
   }
 
@@ -261,41 +230,31 @@ export class ProductService {
   async getProductById(id: string) {
     const p = await prisma.product.findUnique({
       where: { id },
-      include: {
-        category: true,
-        regional: true,
-        supplier: true,
-      },
+      include: PRODUCT_INCLUDE,
     });
 
     if (!p) {
       throw new AppError(404, "Produto não encontrado.");
     }
 
-    return {
-      id: p.id,
-      codigo: p.codigo,
-      name: p.name,
-      descricao: p.descricao,
-      unidade: p.unidade,
-      tabela: Number(p.tabela),
-      valor_unitario: Number(p.tabela),
-      categoria: p.category?.name || "Geral",
-      product_category_id: p.categoryId,
-      regional_id: p.regionalId,
-      regional: p.regional,
-      supplier_id: p.supplierId,
-      fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
-      image_url: p.imageUrl,
-      active: p.active,
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
-    };
+    return withProductExtras(p);
   }
 
   /**
    * Cadastra novo produto
    */
+  /** A tela de produto ainda informa o fornecedor pelo nome: usamos o cadastrado com esse nome, se houver. */
+  private async resolveSupplierId(data: { supplierId?: string | null; fornecedor?: string | null }) {
+    if (data.supplierId) return data.supplierId;
+    const name = data.fornecedor?.trim();
+    if (!name) return undefined;
+    const supplier = await prisma.registeredSupplier.findFirst({
+      where: { OR: [{ name: { equals: name, mode: "insensitive" } }, { tradeName: { equals: name, mode: "insensitive" } }] },
+      select: { id: true },
+    });
+    return supplier?.id;
+  }
+
   async createProduct(user: AccessUser, data: {
     name: string;
     codigo?: string;
@@ -305,11 +264,13 @@ export class ProductService {
     categoryId?: string;
     regionalId?: string;
     supplierId?: string;
+    fornecedor?: string | null;
     imageUrl?: string;
   }) {
     if (!data.name?.trim()) {
       throw new AppError(400, "Nome do produto é obrigatório.");
     }
+    const supplierId = await this.resolveSupplierId(data);
 
     const product = await prisma.product.create({
       data: {
@@ -320,28 +281,14 @@ export class ProductService {
         tabela: data.tabela ?? 0,
         categoryId: data.categoryId,
         regionalId: data.regionalId,
-        supplierId: data.supplierId,
+        supplierId,
         imageUrl: data.imageUrl,
       },
-      include: {
-        category: true,
-        regional: true,
-        supplier: true,
-      },
+      include: PRODUCT_INCLUDE,
     });
     await this.recordHistory("created", product, user.userId, { snapshot: productSnapshot(product) });
 
-    return {
-      id: product.id,
-      codigo: product.codigo,
-      name: product.name,
-      unidade: product.unidade,
-      tabela: Number(product.tabela),
-      valor_unitario: Number(product.tabela),
-      product_category_id: product.categoryId,
-      regional_id: product.regionalId,
-      active: product.active,
-    };
+    return withProductExtras(product);
   }
 
   /**
@@ -359,6 +306,7 @@ export class ProductService {
       categoryId?: string;
       regionalId?: string;
       supplierId?: string;
+      fornecedor?: string | null;
       imageUrl?: string;
       active?: boolean;
     },
@@ -367,6 +315,7 @@ export class ProductService {
     if (!existing) {
       throw new AppError(404, "Produto não encontrado.");
     }
+    const supplierId = data.supplierId !== undefined || data.fornecedor !== undefined ? await this.resolveSupplierId(data) : undefined;
 
     const updated = await prisma.product.update({
       where: { id },
@@ -378,29 +327,15 @@ export class ProductService {
         tabela: data.tabela !== undefined ? data.tabela : undefined,
         categoryId: data.categoryId,
         regionalId: data.regionalId,
-        supplierId: data.supplierId,
+        supplierId,
         imageUrl: data.imageUrl,
         active: data.active,
       },
-      include: {
-        category: true,
-        regional: true,
-        supplier: true,
-      },
+      include: PRODUCT_INCLUDE,
     });
     await this.recordChange(user.userId, existing, updated);
 
-    return {
-      id: updated.id,
-      codigo: updated.codigo,
-      name: updated.name,
-      unidade: updated.unidade,
-      tabela: Number(updated.tabela),
-      valor_unitario: Number(updated.tabela),
-      product_category_id: updated.categoryId,
-      regional_id: updated.regionalId,
-      active: updated.active,
-    };
+    return withProductExtras(updated);
   }
 
   /**
@@ -510,7 +445,7 @@ export class ProductService {
     for (const row of rows) {
       result[row.lookupIndex] = byCode.get(normalizeText(row.codigo)) ?? [];
     }
-    return result;
+    return raw(result);
   }
 
   /** Quantos produtos já existem com cada código (na regional), para avisar duplicidade no import. */
@@ -529,7 +464,7 @@ export class ProductService {
       result[code] = n;
       result[normalizeText(code)] = n;
     }
-    return result;
+    return raw(result);
   }
 
   // ─── Disponibilidade (modelo atual: produto é da regional; categorias ligadas por vínculo) ───
@@ -553,11 +488,11 @@ export class ProductService {
     for (const p of products) {
       map[p.id] = p.categoryId ? (byProductCategory.get(p.categoryId) ?? []) : [];
     }
-    return map;
+    return raw(map);
   }
 
   async getProductContractCategoryIds(productId: string) {
-    const map = await this.getCategoryMap([productId]);
+    const map = (await this.getCategoryMap([productId])).value as Record<string, string[]>;
     if (!(productId in map)) {
       throw new AppError(404, "Produto não encontrado.");
     }
@@ -582,20 +517,14 @@ export class ProductService {
     for (const p of products) {
       map[p.id] = p.regionalId ? (byRegional.get(p.regionalId) ?? []) : all;
     }
-    return map;
+    return raw(map);
   }
 
   async getContractCategoryLinks(contractCategoryIds: string[], productCategoryIds: string[]) {
     if (contractCategoryIds.length === 0 || productCategoryIds.length === 0) return [];
-    const links = await prisma.contractCategoryProductCategoryLink.findMany({
+    return prisma.contractCategoryProductCategoryLink.findMany({
       where: { contractCategoryId: { in: contractCategoryIds }, productCategoryId: { in: productCategoryIds } },
     });
-    return links.map((l) => ({
-      id: l.id,
-      contract_category_id: l.contractCategoryId,
-      product_category_id: l.productCategoryId,
-      created_at: l.createdAt.toISOString(),
-    }));
   }
 
   private async findLinkPair(contractCategoryId: string, productCategoryId: string) {
@@ -728,14 +657,7 @@ export class ProductService {
     const tables = prices.map((p) => Number(p.tabela)).filter((v) => v > 0);
     const categoryNames = unique(categories.map((c) => c.name));
 
-    return {
-      suppliers: supplierNames,
-      tables,
-      // Transitório: nomes que o frontend herdado do Supabase lê
-      fornecedores: supplierNames,
-      tabelas: tables,
-      categories: categoryNames,
-    };
+    return { suppliers: supplierNames, tables, categories: categoryNames };
   }
 
   /**

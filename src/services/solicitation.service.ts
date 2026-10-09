@@ -41,7 +41,7 @@ const SOLICITATION_INCLUDE = {
 const HISTORY_INCLUDE = { user: { select: { name: true } } } as const;
 
 // Transitório: o frontend ainda lê os nomes do Supabase (solicitation_items, created_at, user_profile,
-// unit_price, product.valor_unitario). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
+// unit_price, product.tabela). A API devolve os dois nomes até o front migrar (docs/api-contract.md).
 function formatItem(it: any) {
   const unitPrice = Number(it.unitPrice);
   const product = it.product
@@ -50,7 +50,7 @@ function formatItem(it: any) {
         name: it.product.name,
         codigo: it.product.codigo,
         unidade: it.product.unidade,
-        valor_unitario: Number(it.product.tabela),
+        tabela: Number(it.product.tabela),
         fornecedor: it.product.supplier?.name ?? null,
         categoria: it.product.category?.name ?? null,
       }

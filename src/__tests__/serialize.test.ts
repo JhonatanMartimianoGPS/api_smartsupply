@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Prisma } from "@prisma/client";
-import { serialize, toCamelCase, toSnakeKey, toCamelKey } from "../lib/serialize.js";
+import { serialize, toCamelCase, toSnakeKey, toCamelKey, raw } from "../lib/serialize.js";
 
 describe("serialize: convenção snake_case da API", () => {
   it("traduz as chaves do modelo para snake_case, inclusive aninhadas e em listas", () => {
@@ -45,6 +45,10 @@ describe("serialize: convenção snake_case da API", () => {
   it("chaves dinâmicas (uuid, contrato_mês, índice) não são traduzidas", () => {
     const out = serialize<any>({ "8b564a3b-75a0_2026-10-01": { monthlyBudget: 1 }, "0": [{ codigoX: 1 }] });
     assert.deepEqual(out, { "8b564a3b-75a0_2026-10-01": { monthly_budget: 1 }, "0": [{ codigo_x: 1 }] });
+  });
+
+  it("raw(): mapa sai como está", () => {
+    assert.deepEqual(serialize<any>(raw({ "ABC": 2, "TST-001": 1 })), { ABC: 2, "TST-001": 1 });
   });
 
   it("chaves: ida e volta", () => {

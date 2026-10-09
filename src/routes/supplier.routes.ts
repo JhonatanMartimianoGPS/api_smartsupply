@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { supplierController } from "../controllers/supplier.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Listagem e utilitários de consolidação
 router.get("/", (req, res, next) => supplierController.list(req, res, next));

@@ -516,15 +516,9 @@ export class ContractService {
     });
 
     return products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      codigo: p.codigo || "",
-      unidade: p.unidade,
+      ...p,
+      categoria: p.category?.name ?? "Geral",
       fornecedor: p.supplier?.tradeName || p.supplier?.name || null,
-      categoria: p.category?.name || "Geral",
-      tabela: Number(p.tabela),
-      valor_unitario: Number(p.tabela),
-      image_url: p.imageUrl,
     }));
   }
 

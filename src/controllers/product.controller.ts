@@ -9,32 +9,22 @@ const asString = (value: unknown) =>
   typeof value === "string" && value !== "" && !value.includes("\0") ? value : undefined;
 
 /**
- * Normaliza o body de criação/edição de produto.
- *
- * O frontend envia `{ product: { ...snake_case }, categoryIds, contractIds }`
- * (herdado do contrato do Supabase), enquanto o service espera os campos
- * em camelCase no nível raiz. Aceita os dois formatos.
- *
- * Preço: no schema atual a coluna `tabela` guarda o valor unitário (é o que
- * as respostas expõem como `valor_unitario`). No formato do frontend, `tabela`
- * é o número da tabela de preço, então o preço vem de `valor_unitario`.
+ * Corpo de criação/edição de produto (já em camelCase pelo apiConvention): só os campos do modelo.
+ * `tabela` é o preço unitário; `fornecedor` (nome) é aceito e resolvido para o fornecedor cadastrado.
  */
 function toProductInput(body: any) {
-  const isEnvelope = body && typeof body.product === "object" && body.product !== null;
-  const p = isEnvelope ? body.product : (body ?? {});
-
-  const price = isEnvelope ? p.valor_unitario : (p.tabela ?? p.valor_unitario);
-
+  const p = body ?? {};
   return {
     name: p.name,
     codigo: p.codigo,
     descricao: p.descricao,
     unidade: p.unidade,
-    tabela: price !== undefined && price !== null && price !== "" ? Number(price) : undefined,
-    categoryId: p.categoryId ?? p.product_category_id ?? undefined,
-    regionalId: p.regionalId ?? p.regional_id ?? undefined,
-    supplierId: p.supplierId ?? p.supplier_id ?? undefined,
-    imageUrl: p.imageUrl ?? p.image_url ?? undefined,
+    tabela: p.tabela !== undefined && p.tabela !== null && p.tabela !== "" ? Number(p.tabela) : undefined,
+    categoryId: p.categoryId ?? undefined,
+    regionalId: p.regionalId ?? undefined,
+    supplierId: p.supplierId ?? undefined,
+    fornecedor: typeof p.fornecedor === "string" ? p.fornecedor : undefined,
+    imageUrl: p.imageUrl ?? undefined,
     active: p.active,
   };
 }
