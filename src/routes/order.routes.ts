@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { orderController } from "../controllers/order.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import {
   createMonthlyOrderSchema,
@@ -11,6 +12,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Listagens específicas
 router.get("/me", (req, res, next) => orderController.getMyOrders(req, res, next));

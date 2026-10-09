@@ -24,7 +24,7 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 
 | Recurso | Campos calculados |
 | --- | --- |
-| Pedidos | `competence_month` (`AAAA-MM-01`), `items_count` |
+| Pedidos | pedido: `competence_month` (`AAAA-MM-01`), `items_count` (só em `active-month`); item: `total`, `product.categoria`, `product.fornecedor` (dos snapshots); histórico: `user_name`; divergência: `competence_month`, `reporter_name`, `contract`, `order` (resumo); relato: `competence_month`, `contract_id` |
 | Chamados | `counts` (mensagens, etapas, anexos, produtos), `total_price` no produto do chamado |
 | Dashboard | todos (agregações) |
 | Validação de rascunho | todos (`exists_in_catalog`, `available_for_contract`, …) |
@@ -58,7 +58,7 @@ Este documento é o acordo entre `api_smartsupply` e `client_smartsupply`. Os do
 | Mural | `/feed/*` | migrar |
 | Fornecedores | `/suppliers` | migrar |
 | Usuários | `/users` | migrar |
-| Pedidos | `/orders/*` | migrar (campos duplicados, divergências, `active-month`) |
+| Pedidos | `/orders/*` | ok |
 | Contratos e orçamento | `/contracts/*` | migrar (campos duplicados) |
 | Produtos | `/products/*` | migrar (listagem devolve `{items,total}` e `{products,totalCount}`; cadastro recebe `{product, categoryIds}`) |
 | Notificações | `/notifications` | migrar (`read`, `link_url`, `metadata`) |

@@ -8,6 +8,9 @@ import { notificationService } from "./notification.service.js";
 // Pedido "ativo": ocupa a competência do contrato. Rejeitado e cancelado liberam o mês.
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["pendente", "aprovado", "entregue"];
 
+// Competência do pedido no formato que as telas comparam ("AAAA-MM-01")
+const toCompetence = (o: { ano: number; mes: number }) => `${o.ano}-${String(o.mes).padStart(2, "0")}-01`;
+
 export class OrderService {
   /**
    * Suborçamento por categoria de produto (regra herdada das antigas funções create_order_with_items
@@ -186,15 +189,15 @@ export class OrderService {
    */
   private async prepareItems(
     contract: { regionalId: string; allowCustomPrices: boolean },
-    items: Array<{ productId?: string; product_id?: string; quantity: number; unitPrice?: number; unit_price?: number }>,
+    items: Array<{ productId?: string; quantity: number; unitPrice?: number | null }>,
   ) {
     const wanted = new Map<string, { quantity: number; customPrice?: number }>();
     for (const it of items) {
-      const productId = it?.productId || it?.product_id;
+      const productId = it?.productId;
       if (typeof productId !== "string" || !Number.isInteger(it.quantity) || it.quantity <= 0) {
         throw new AppError(400, "Os itens informados são inválidos.");
       }
-      const sent = it.unitPrice ?? it.unit_price;
+      const sent = it.unitPrice;
       if (sent !== undefined && sent !== null && (typeof sent !== "number" || !Number.isFinite(sent) || sent < 0)) {
         throw new AppError(400, "Os itens informados são inválidos.");
       }
@@ -409,39 +412,13 @@ export class OrderService {
         contract: {
           include: { regional: true, category: true },
         },
-        createdBy: { select: { name: true } },
+        createdBy: { select: { id: true, name: true } },
         _count: { select: { items: true } },
       },
     });
 
-    // Transitório: a tela inicial lê o formato do Supabase (order_id, total, competence_month...)
-    return orders.map((o) => ({
-      id: o.id,
-      order_id: o.id,
-      user_id: o.createdById,
-      contract_id: o.contractId,
-      contractId: o.contractId,
-      contract_name: o.contract.name,
-      contractName: o.contract.name,
-      regional_name: o.contract.regional.name,
-      regionalName: o.contract.regional.name,
-      category_name: o.contract.category?.name || "Geral",
-      categoryName: o.contract.category?.name || "Geral",
-      contract_category_name: o.contract.category?.name ?? null,
-      contract_category_color: o.contract.category?.color ?? null,
-      created_by_name: o.createdBy?.name ?? null,
-      status: o.status,
-      total_amount: Number(o.totalAmount),
-      totalAmount: Number(o.totalAmount),
-      total: Number(o.totalAmount),
-      items_count: o._count.items,
-      itemsCount: o._count.items,
-      is_extra_order: o.isExtraOrder,
-      isExtraOrder: o.isExtraOrder,
-      competence_month: `${o.ano}-${String(o.mes).padStart(2, "0")}-01`,
-      created_at: o.createdAt.toISOString(),
-      updated_at: o.updatedAt.toISOString(),
-    }));
+    // items_count e competence_month são calculados; o resto é o modelo
+    return orders.map(({ _count, ...o }) => ({ ...o, itemsCount: _count.items, competenceMonth: toCompetence(o) }));
   }
 
   /**
@@ -514,21 +491,14 @@ export class OrderService {
   async createMonthlyOrder(
     user: AccessUser,
     data: {
-      contract_id?: string;
-      contractId?: string;
+      contractId: string;
       mes?: number;
       ano?: number;
       notes?: string;
-      items: Array<{
-        product_id?: string;
-        productId?: string;
-        quantity: number;
-        unit_price?: number;
-        unitPrice?: number;
-      }>;
+      items: Array<{ productId: string; quantity: number; unitPrice?: number | null }>;
     },
   ) {
-    const contractId = data.contractId || data.contract_id;
+    const contractId = data.contractId;
     if (!contractId) {
       throw new AppError(400, "Contrato é obrigatório.");
     }
@@ -594,22 +564,15 @@ export class OrderService {
   async createExtraOrder(
     user: AccessUser,
     data: {
-      contract_id?: string;
-      contractId?: string;
+      contractId: string;
       mes?: number;
       ano?: number;
       notes?: string;
       justification?: string;
-      items: Array<{
-        product_id?: string;
-        productId?: string;
-        quantity: number;
-        unit_price?: number;
-        unitPrice?: number;
-      }>;
+      items: Array<{ productId: string; quantity: number; unitPrice?: number | null }>;
     },
   ) {
-    const contractId = data.contractId || data.contract_id;
+    const contractId = data.contractId;
     if (!contractId) {
       throw new AppError(400, "Contrato é obrigatório.");
     }
@@ -844,39 +807,7 @@ export class OrderService {
       include: { product: true },
     });
 
-    return items.map((it) => ({
-      id: it.id,
-      order_id: it.orderId,
-      orderId: it.orderId,
-      product_id: it.productId,
-      productId: it.productId,
-      quantity: it.quantity,
-      unit_price: Number(it.unitPrice),
-      unitPrice: Number(it.unitPrice),
-      total: Number(it.unitPrice) * it.quantity,
-      product_name_snapshot: it.productNameSnapshot,
-      productNameSnapshot: it.productNameSnapshot,
-      product_codigo_snapshot: it.productCodigoSnapshot,
-      productCodeSnapshot: it.productCodigoSnapshot,
-      product_unidade_snapshot: it.productUnidadeSnapshot,
-      productUnitSnapshot: it.productUnidadeSnapshot,
-      product_categoria_snapshot: it.productCategoriaSnapshot,
-      categoryNameSnapshot: it.productCategoriaSnapshot,
-      product_fornecedor_snapshot: it.productFornecedorSnapshot,
-      product_image_url_snapshot: it.productImageUrlSnapshot,
-      product: it.product
-        ? {
-            id: it.product.id,
-            name: it.product.name,
-            codigo: it.product.codigo || "",
-            unidade: it.product.unidade,
-            categoria: it.productCategoriaSnapshot || "Geral",
-            tabela: Number(it.product.tabela),
-            image_url: it.product.imageUrl,
-            fornecedor: it.productFornecedorSnapshot || null,
-          }
-        : null,
-    }));
+    return items.map((it) => this.formatItem(it));
   }
 
   /**
@@ -885,7 +816,7 @@ export class OrderService {
   async updateItems(
     user: AccessUser,
     orderId: string,
-    items: Array<{ product_id: string; quantity: number; unit_price: number }>,
+    items: Array<{ productId: string; quantity: number; unitPrice: number }>,
   ) {
     if (!accessService.isSuprimentos(user)) {
       throw new AppError(403, "Apenas usuários de suprimentos ou administradores podem editar os itens do pedido.");
@@ -959,19 +890,8 @@ export class OrderService {
     });
     const names = await this.userNamesById(history.map((h) => h.userId));
 
-    return history.map((h) => ({
-      id: h.id,
-      order_id: h.orderId,
-      orderId: h.orderId,
-      user_id: h.userId,
-      userId: h.userId,
-      userName: h.userId ? names.get(h.userId) : undefined,
-      user_profile: h.userId ? { full_name: names.get(h.userId) ?? "Usuário" } : undefined,
-      action: h.action,
-      details: h.details,
-      created_at: h.createdAt.toISOString(),
-      createdAt: h.createdAt.toISOString(),
-    }));
+    // user_name é calculado: o histórico guarda só o id do usuário
+    return history.map((h) => ({ ...h, userName: h.userId ? (names.get(h.userId) ?? null) : null }));
   }
 
   /** Nome dos usuários pelos ids, numa consulta só (para histórico e divergências). */
@@ -997,14 +917,7 @@ export class OrderService {
         details: data.details,
       },
     });
-    return {
-      id: entry.id,
-      order_id: entry.orderId,
-      orderId: entry.orderId,
-      action: entry.action,
-      details: entry.details,
-      created_at: entry.createdAt.toISOString(),
-    };
+    return entry;
   }
 
   /**
@@ -1043,37 +956,16 @@ export class OrderService {
     order: { include: { contract: { include: { regional: true } } } },
   };
 
-  // Transitório: a aba Acompanhamento lê o formato do Supabase (order_id, observacao, resolution_note,
-  // status open/resolved). Os itens divergentes (items_payload) vêm do fluxo de estoque, fora do modelo atual.
+  // Divergência: o modelo mais competence_month, reporter_name (o modelo guarda só o id de quem relatou)
+  // e um resumo do contrato e do pedido. Os itens divergentes (items_payload) ficam no fluxo de estoque.
   private formatDivergence(d: any, names: Map<string, string>) {
-    const order = d.order;
+    const { order, ...divergence } = d;
     return {
-      ...d,
-      order_id: d.orderId,
-      contract_id: order?.contractId ?? null,
-      stock_grupo_id: null,
-      reported_by: d.reportedById,
-      reporter_profile: { full_name: names.get(d.reportedById) ?? null },
-      competence_month: order ? `${order.ano}-${String(order.mes).padStart(2, "0")}-01` : null,
-      status: d.status === "resolvida" ? "resolved" : "open",
-      items_payload: [],
-      divergent_items_count: 0,
-      observacao: d.description,
-      resolution_note: d.notes,
-      resolved_by: null,
-      resolved_at: d.resolvedAt ? d.resolvedAt.toISOString() : null,
-      created_at: d.createdAt.toISOString(),
-      updated_at: d.updatedAt.toISOString(),
-      contract: order?.contract
-        ? {
-            id: order.contract.id,
-            name: order.contract.name,
-            regional: order.contract.regional ? { id: order.contract.regional.id, name: order.contract.regional.name } : null,
-          }
-        : null,
-      order: order
-        ? { id: order.id, status: order.status, total: Number(order.totalAmount), created_at: order.createdAt.toISOString() }
-        : null,
+      ...divergence,
+      competenceMonth: order ? toCompetence(order) : null,
+      reporterName: names.get(d.reportedById) ?? null,
+      contract: order?.contract ?? null,
+      order: order ? { id: order.id, status: order.status, totalAmount: order.totalAmount, createdAt: order.createdAt } : null,
     };
   }
 
@@ -1104,11 +996,10 @@ export class OrderService {
 
   async createDeliveryDivergence(
     user: AccessUser,
-    data: { orderId: string; description?: string | null; observacao?: string | null; items?: unknown[] },
+    data: { orderId: string; description?: string | null; items?: unknown[] },
   ) {
     await this.assertOrderAccess(user, data.orderId);
-    // O front envia `observacao` (formato do Supabase); `description` é o nome no banco
-    const text = typeof data.description === "string" ? data.description : typeof data.observacao === "string" ? data.observacao : "";
+    const text = typeof data.description === "string" ? data.description : "";
     const itemsCount = Array.isArray(data.items) ? data.items.length : 0;
     const description = text.trim() || (itemsCount > 0 ? `Divergência de entrega em ${itemsCount} item(ns).` : "");
     if (!description) {
@@ -1155,7 +1046,7 @@ export class OrderService {
 
   // ─── Relatos de Problemas ───────────────────────────────────────────────────
   async listIssueReports(user: AccessUser) {
-    return prisma.orderIssueReport.findMany({
+    const reports = await prisma.orderIssueReport.findMany({
       // Suprimentos e admin veem os relatos dos contratos que acessam; os demais, só os próprios
       where: {
         order: { contract: accessService.contractFilter(user) },
@@ -1166,6 +1057,8 @@ export class OrderService {
       },
       orderBy: { createdAt: "desc" },
     });
+    // competence_month e contract_id vêm do pedido
+    return reports.map((r) => ({ ...r, competenceMonth: toCompetence(r.order), contractId: r.order.contractId }));
   }
 
   async createIssueReport(user: AccessUser, data: { orderId: string; description: string }) {
@@ -1207,82 +1100,25 @@ export class OrderService {
     });
   }
 
-  // ─── Helper de Formatação ───────────────────────────────────────────────────
+  // ─── Formatação ─────────────────────────────────────────────────────────────
+  // Item do pedido: o modelo mais o total da linha e o produto (categoria/fornecedor vêm do snapshot)
+  private formatItem(it: any) {
+    return {
+      ...it,
+      total: Number(it.unitPrice) * it.quantity,
+      product: it.product
+        ? { ...it.product, categoria: it.productCategoriaSnapshot || "Geral", fornecedor: it.productFornecedorSnapshot || null }
+        : null,
+    };
+  }
+
+  // Pedido: o modelo (com as relações carregadas) mais competence_month
   private formatOrder(o: any) {
     return {
-      id: o.id,
-      user_id: o.createdById,
-      userId: o.createdById,
-      userName: o.createdBy?.name,
-      user_profile: o.createdBy ? { full_name: o.createdBy.name } : undefined,
-      contract_id: o.contractId,
-      contractId: o.contractId,
-      contract: o.contract
-        ? {
-            id: o.contract.id,
-            name: o.contract.name,
-            regional_id: o.contract.regionalId,
-            regional: o.contract.regional,
-            category_id: o.contract.categoryId,
-            category: o.contract.category,
-            total_budget: Number(o.contract.totalBudget),
-            used_budget: Number(o.contract.usedBudget),
-            unlimited_budget: o.contract.unlimitedBudget,
-            allow_extra_order: o.contract.allowExtraOrder,
-            budget_locked: o.contract.budgetLocked,
-          }
-        : undefined,
-      status: o.status,
-      mes: o.mes,
-      ano: o.ano,
-      competenceMonth: `${o.ano}-${String(o.mes).padStart(2, "0")}`,
-      competence_month: `${o.ano}-${String(o.mes).padStart(2, "0")}-01`,
-      is_extra_order: o.isExtraOrder,
-      isExtraOrder: o.isExtraOrder,
-      notes: o.notes,
-      total_amount: Number(o.totalAmount),
-      totalAmount: Number(o.totalAmount),
-      total: Number(o.totalAmount),
-      created_at: o.createdAt.toISOString(),
-      createdAt: o.createdAt.toISOString(),
-      updated_at: o.updatedAt.toISOString(),
-      updatedAt: o.updatedAt.toISOString(),
-      items: o.items
-        ? o.items.map((it: any) => ({
-            id: it.id,
-            order_id: it.orderId,
-            orderId: it.orderId,
-            product_id: it.productId,
-            productId: it.productId,
-            quantity: it.quantity,
-            unit_price: Number(it.unitPrice),
-            unitPrice: Number(it.unitPrice),
-            total: Number(it.unitPrice) * it.quantity,
-            product_name_snapshot: it.productNameSnapshot,
-            productNameSnapshot: it.productNameSnapshot,
-            product_codigo_snapshot: it.productCodigoSnapshot,
-            productCodeSnapshot: it.productCodigoSnapshot,
-            product_unidade_snapshot: it.productUnidadeSnapshot,
-            productUnitSnapshot: it.productUnidadeSnapshot,
-            product_categoria_snapshot: it.productCategoriaSnapshot,
-            categoryNameSnapshot: it.productCategoriaSnapshot,
-            product_fornecedor_snapshot: it.productFornecedorSnapshot,
-            product_image_url_snapshot: it.productImageUrlSnapshot,
-            product: it.product
-              ? {
-                  id: it.product.id,
-                  name: it.product.name,
-                  codigo: it.product.codigo || "",
-                  unidade: it.product.unidade,
-                  categoria: it.productCategoriaSnapshot || "Geral",
-                  tabela: Number(it.product.tabela),
-                        image_url: it.product.imageUrl,
-                  fornecedor: it.productFornecedorSnapshot || null,
-                }
-              : null,
-          }))
-        : [],
-      history: o.history || [],
+      ...o,
+      competenceMonth: toCompetence(o),
+      items: (o.items ?? []).map((it: any) => this.formatItem(it)),
+      history: o.history ?? [],
     };
   }
 }

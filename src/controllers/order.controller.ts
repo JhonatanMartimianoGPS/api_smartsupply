@@ -154,12 +154,7 @@ export class OrderController {
 
   async resolveDivergence(req: Request, res: Response, next: NextFunction) {
     try {
-      // O front envia resolutionNote (formato do Supabase); notes é o nome no banco
-      const divergence = await orderService.resolveDeliveryDivergence(
-        req.user!,
-        req.params.id as string,
-        req.body?.resolutionNote ?? req.body?.notes,
-      );
+      const divergence = await orderService.resolveDeliveryDivergence(req.user!, req.params.id as string, req.body?.notes);
       res.json(divergence);
     } catch (error) {
       next(error);
