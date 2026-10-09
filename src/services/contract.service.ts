@@ -25,26 +25,6 @@ function parsePeriodMonth(value: unknown) {
 /** O frontend compara o mês como data ("2026-10-01"), então a resposta usa esse formato. */
 const toPeriodDate = (periodMonth: string) => `${periodMonth}-01`;
 
-// Transitório: as telas leem os nomes do Supabase (regional_id, total_budget, allow_custom_prices...)
-function formatContract(c: any) {
-  return {
-    ...c,
-    regional_id: c.regionalId,
-    regional_name: c.regional?.name ?? null,
-    category_id: c.categoryId,
-    total_budget: Number(c.totalBudget),
-    used_budget: Number(c.usedBudget),
-    unlimited_budget: c.unlimitedBudget,
-    allow_extra_order: c.allowExtraOrder,
-    allow_custom_prices: c.allowCustomPrices,
-    allow_unlimited_items_solicitation: c.allowUnlimitedItemsSolicitation,
-    max_items_per_solicitation: c.maxItemsPerSolicitation,
-    budget_locked: c.budgetLocked,
-    created_at: c.createdAt?.toISOString?.() ?? c.createdAt,
-    updated_at: c.updatedAt?.toISOString?.() ?? c.updatedAt,
-  };
-}
-
 export class ContractService {
   /**
    * Lista os contratos que o usuário pode ver (no Supabase era a RLS de contracts)
@@ -63,7 +43,7 @@ export class ContractService {
       orderBy: { name: "asc" },
     });
 
-    return contracts.map(formatContract);
+    return contracts;
   }
 
   /** Categoria de contrato informada precisa existir (senão o banco recusaria com erro de chave estrangeira) */
@@ -109,32 +89,15 @@ export class ContractService {
       },
     });
 
+    const { productCategoryBudgets, ...rest } = contract;
     return {
-      ...contract,
-      regional_id: contract.regionalId,
-      category_id: contract.categoryId,
-      total_budget: Number(contract.totalBudget),
-      used_budget: Number(contract.usedBudget),
-      unlimited_budget: contract.unlimitedBudget,
-      allow_extra_order: contract.allowExtraOrder,
-      allow_custom_prices: contract.allowCustomPrices,
-      allow_unlimited_items_solicitation: contract.allowUnlimitedItemsSolicitation,
-      max_items_per_solicitation: contract.maxItemsPerSolicitation,
-      budget_locked: contract.budgetLocked,
-      monthly_total_budget: currentPeriod ? Number(currentPeriod.monthlyBudget) : Number(contract.totalBudget),
-      monthly_used_budget: currentPeriod ? Number(currentPeriod.usedBudget) : 0,
-      monthly_budget_locked: currentPeriod?.budgetLocked ?? contract.budgetLocked,
-      current_budget_period: currentPeriod
-        ? {
-            id: currentPeriod.id,
-            contract_id: currentPeriod.contractId,
-            period_month: toPeriodDate(currentPeriod.periodMonth),
-            monthly_budget: Number(currentPeriod.monthlyBudget),
-            used_budget: Number(currentPeriod.usedBudget),
-            budget_locked: currentPeriod.budgetLocked,
-          }
-        : null,
-      subbudgets: contract.productCategoryBudgets.map((sb) => {
+      ...rest,
+      // Calculados: orçamento do mês corrente e suborçamentos por categoria de produto
+      monthlyTotalBudget: currentPeriod ? Number(currentPeriod.monthlyBudget) : Number(contract.totalBudget),
+      monthlyUsedBudget: currentPeriod ? Number(currentPeriod.usedBudget) : 0,
+      monthlyBudgetLocked: currentPeriod?.budgetLocked ?? contract.budgetLocked,
+      currentBudgetPeriod: currentPeriod ? { ...currentPeriod, periodMonth: toPeriodDate(currentPeriod.periodMonth) } : null,
+      subbudgets: productCategoryBudgets.map((sb) => {
         const allocated = Number(sb.periods[0] ? sb.periods[0].monthlyBudget : sb.monthlyBudget);
         const used = Number(sb.periods[0]?.usedBudget ?? 0);
         return {
@@ -181,7 +144,7 @@ export class ContractService {
       },
     });
 
-    return formatContract(contract);
+    return contract;
   }
 
   /**
@@ -216,7 +179,7 @@ export class ContractService {
       },
     });
 
-    return formatContract(updated);
+    return updated;
   }
 
   /**
@@ -312,21 +275,8 @@ export class ContractService {
       take: 120,
     });
 
-    return periods.map((p) => ({
-      id: p.id,
-      contract_id: p.contractId,
-      contractId: p.contractId,
-      period_month: toPeriodDate(p.periodMonth),
-      periodMonth: toPeriodDate(p.periodMonth),
-      monthly_budget: Number(p.monthlyBudget),
-      monthlyBudget: Number(p.monthlyBudget),
-      used_budget: Number(p.usedBudget),
-      usedBudget: Number(p.usedBudget),
-      budget_locked: p.budgetLocked,
-      budgetLocked: p.budgetLocked,
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
-    }));
+    // O mês sai como "AAAA-MM-01" (as telas comparam datas)
+    return periods.map((p) => ({ ...p, periodMonth: toPeriodDate(p.periodMonth) }));
   }
 
   /**
@@ -360,14 +310,7 @@ export class ContractService {
     for (const entry of requested) {
       const period = periodByKey.get(`${entry.contractId}_${entry.periodMonth}`);
       if (!period) continue;
-      result[entry.key] = {
-        id: period.id,
-        contract_id: period.contractId,
-        period_month: toPeriodDate(period.periodMonth),
-        monthly_budget: Number(period.monthlyBudget),
-        used_budget: Number(period.usedBudget),
-        budget_locked: period.budgetLocked,
-      };
+      result[entry.key] = { ...period, periodMonth: toPeriodDate(period.periodMonth) };
     }
 
     return result;
@@ -376,31 +319,6 @@ export class ContractService {
   // ─── Suborçamentos por categoria de produto ─────────────────────────────────
   // Ver exige acesso ao contrato; criar, alterar e ativar/desativar é só de suprimentos e admin
   // (as mesmas regras da RLS do Supabase).
-
-  private formatSubbudget(b: {
-    id: string;
-    contractId: string;
-    productCategoryId: string;
-    monthlyBudget: Prisma.Decimal;
-    active: boolean;
-    deactivatedAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
-    return {
-      id: b.id,
-      contract_id: b.contractId,
-      contractId: b.contractId,
-      product_category_id: b.productCategoryId,
-      productCategoryId: b.productCategoryId,
-      monthly_budget: Number(b.monthlyBudget),
-      monthlyBudget: Number(b.monthlyBudget),
-      active: b.active,
-      deactivated_at: b.deactivatedAt ? b.deactivatedAt.toISOString() : null,
-      created_at: b.createdAt.toISOString(),
-      updated_at: b.updatedAt.toISOString(),
-    };
-  }
 
   private assertCanManageSubbudgets(user: AccessUser) {
     if (!accessService.isSuprimentos(user)) {
@@ -431,7 +349,7 @@ export class ContractService {
       where: { contractId },
       orderBy: { createdAt: "asc" },
     });
-    return budgets.map((b) => this.formatSubbudget(b));
+    return budgets;
   }
 
   async listSubbudgetPeriods(user: AccessUser, contractId: string) {
@@ -441,16 +359,10 @@ export class ContractService {
       include: { budget: { select: { productCategoryId: true } } },
       orderBy: [{ periodMonth: "desc" }, { createdAt: "asc" }],
     });
-    return periods.map((p) => ({
-      id: p.id,
-      contract_product_category_budget_id: p.contractProductCategoryBudgetId,
-      contract_id: p.contractId,
-      product_category_id: p.budget.productCategoryId,
-      period_month: toPeriodDate(p.periodMonth),
-      monthly_budget: Number(p.monthlyBudget),
-      used_budget: Number(p.usedBudget),
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
+    return periods.map(({ budget, ...p }) => ({
+      ...p,
+      productCategoryId: budget.productCategoryId,
+      periodMonth: toPeriodDate(p.periodMonth),
     }));
   }
 
@@ -477,7 +389,7 @@ export class ContractService {
         await this.syncCurrentCategoryPeriod(tx, contractId);
         return budget;
       });
-      return this.formatSubbudget(created);
+      return created;
     } catch (error) {
       // Categoria repetida (inclusive dois cadastros ao mesmo tempo): o índice único do banco barra
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw duplicated;
@@ -506,7 +418,7 @@ export class ContractService {
       if (result.active) await this.syncCurrentCategoryPeriod(tx, budget.contractId);
       return result;
     });
-    return this.formatSubbudget(updated);
+    return updated;
   }
 
   async setSubbudgetActive(user: AccessUser, id: string, active: unknown) {
@@ -515,7 +427,7 @@ export class ContractService {
       throw new AppError(400, "O campo active deve ser verdadeiro ou falso.");
     }
     const budget = await this.findSubbudgetForUser(user, id);
-    if (budget.active === active) return this.formatSubbudget(budget);
+    if (budget.active === active) return budget;
 
     const updated = await prisma.$transaction(async (tx) => {
       const result = await tx.contractProductCategoryBudget.update({
@@ -525,7 +437,7 @@ export class ContractService {
       if (active) await this.syncCurrentCategoryPeriod(tx, budget.contractId);
       return result;
     });
-    return this.formatSubbudget(updated);
+    return updated;
   }
 
   /**

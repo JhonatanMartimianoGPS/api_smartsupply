@@ -13,13 +13,16 @@ import { Prisma } from "@prisma/client";
 // Chaves cujo conteúdo é JSON livre: não traduzimos o que há dentro delas
 const RAW_KEYS = new Set(["details", "metadata", "items_payload", "diff_before", "diff_after", "permissions"]);
 
+// Chave dinâmica (uuid, "<contrato>_<mês>", índice): não é nome de campo, fica como está
+const isDynamicKey = (key: string) => /[^A-Za-z0-9_]/.test(key);
+
 export function toSnakeKey(key: string): string {
-  if (key.startsWith("_")) return key;
+  if (key.startsWith("_") || isDynamicKey(key)) return key;
   return key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
 export function toCamelKey(key: string): string {
-  if (key.startsWith("_")) return key;
+  if (key.startsWith("_") || isDynamicKey(key)) return key;
   return key.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
 }
 

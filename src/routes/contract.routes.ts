@@ -2,11 +2,13 @@ import { Router } from "express";
 import { contractController } from "../controllers/contract.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { createContractSchema, updateContractSchema } from "../schemas/contract.schema.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Listagem e busca em lote
 router.get("/", (req, res, next) => contractController.list(req, res, next));

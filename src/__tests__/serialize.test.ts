@@ -42,6 +42,11 @@ describe("serialize: convenção snake_case da API", () => {
     assert.deepEqual(toCamelCase<any>({ contract_id: "c1", contractId: null }), { contractId: "c1" });
   });
 
+  it("chaves dinâmicas (uuid, contrato_mês, índice) não são traduzidas", () => {
+    const out = serialize<any>({ "8b564a3b-75a0_2026-10-01": { monthlyBudget: 1 }, "0": [{ codigoX: 1 }] });
+    assert.deepEqual(out, { "8b564a3b-75a0_2026-10-01": { monthly_budget: 1 }, "0": [{ codigo_x: 1 }] });
+  });
+
   it("chaves: ida e volta", () => {
     assert.equal(toSnakeKey("productCodigoSnapshot"), "product_codigo_snapshot");
     assert.equal(toSnakeKey("imageURL"), "image_url");
