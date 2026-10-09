@@ -1,4 +1,13 @@
+import { Prisma, type SystemModuleCategory } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { AppError } from "../middlewares/error.middleware.js";
+import type {
+  CreateSystemModuleCategoryInput,
+  UpdateSystemModuleCategoryInput,
+  UpdateSystemModuleInput,
+} from "../schemas/system.schema.js";
+import type { AccessUser } from "./access.service.js";
+import { auditService } from "./audit.service.js";
 
 export class SystemService {
   // ─── Telemetria e Saúde ─────────────────────────────────────────────────────
@@ -36,24 +45,179 @@ export class SystemService {
   }
 
   // ─── Módulos do Sistema ─────────────────────────────────────────────────────
+  // Só o super_admin altera (no Supabase: policy "Allow super_admin to manage system_modules_config").
+  // O perfil é checado na rota (authorize); aqui ficam as regras.
+
   async listModules() {
-    return prisma.systemModule.findMany({
-      orderBy: { category: "asc" },
-    });
+    return prisma.systemModule.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
   }
 
-  async updateModule(id: string, data: { name?: string; category?: string; enabled?: boolean; roles?: string[] }) {
-    return prisma.systemModule.update({
-      where: { id },
-      data,
-    });
+  private async findModule(id: string) {
+    const module = await prisma.systemModule.findUnique({ where: { id } });
+    if (!module) {
+      throw new AppError(404, "Módulo não encontrado.");
+    }
+    return module;
   }
 
-  async toggleModule(id: string, is_enabled: boolean) {
-    return prisma.systemModule.update({
+  async updateModule(user: AccessUser, id: string, data: UpdateSystemModuleInput) {
+    const before = await this.findModule(id);
+    if (data.category && data.category !== before.category) {
+      await this.assertCategoryExists(data.category);
+    }
+
+    const module = await prisma.systemModule.update({
       where: { id },
-      data: { enabled: is_enabled },
+      data: {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        enabled: data.enabled,
+        icon: data.icon,
+        route: data.route,
+        badge: data.badge,
+        roles: data.roles,
+        updatedById: user.userId,
+      },
     });
+
+    void auditService.log({
+      userId: user.userId,
+      action: "UPDATE",
+      entity: "SystemConfig",
+      entityId: id,
+      details: `Módulo "${module.name}" atualizado.`,
+      diffBefore: { ...before },
+      diffAfter: { ...module },
+    });
+    return module;
+  }
+
+  async toggleModule(user: AccessUser, id: string, enabled: boolean) {
+    await this.findModule(id);
+    const module = await prisma.systemModule.update({
+      where: { id },
+      data: { enabled, updatedById: user.userId },
+    });
+    void auditService.log({
+      userId: user.userId,
+      action: "UPDATE",
+      entity: "SystemConfig",
+      entityId: id,
+      details: `Módulo "${module.name}" ${enabled ? "ativado" : "desativado"}.`,
+    });
+    return module;
+  }
+
+  async enableAllModules(user: AccessUser) {
+    const result = await prisma.systemModule.updateMany({
+      where: { enabled: false },
+      data: { enabled: true, updatedById: user.userId },
+    });
+    void auditService.log({
+      userId: user.userId,
+      action: "UPDATE",
+      entity: "SystemConfig",
+      details: `${result.count} módulo(s) reativado(s) de uma vez.`,
+    });
+    return { updated: result.count };
+  }
+
+  // ─── Categorias de Módulos ──────────────────────────────────────────────────
+  private async assertCategoryExists(id: string) {
+    const count = await prisma.systemModuleCategory.count({ where: { id } });
+    if (count === 0) {
+      throw new AppError(400, "Categoria de módulo não encontrada.");
+    }
+  }
+
+  /** Sem id, ele vem do rótulo: "Serviços & Salas" vira "servicos_salas" (mesma regra do frontend). */
+  private slugFromLabel(label: string) {
+    return label
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 50);
+  }
+
+  async listModuleCategories() {
+    return prisma.systemModuleCategory.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+  }
+
+  async createModuleCategory(user: AccessUser, data: CreateSystemModuleCategoryInput) {
+    const id = data.id || this.slugFromLabel(data.label);
+    if (!id) {
+      throw new AppError(400, "Não foi possível gerar um identificador para a categoria.");
+    }
+    const sortOrder = data.sortOrder ?? (await prisma.systemModuleCategory.count()) + 1;
+
+    let category: SystemModuleCategory;
+    try {
+      category = await prisma.systemModuleCategory.create({
+        data: {
+          id,
+          label: data.label,
+          description: data.description ?? null,
+          color: data.color ?? "indigo",
+          sortOrder,
+        },
+      });
+    } catch (error) {
+      // P2002 = chave duplicada: alguém criou a mesma categoria antes
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new AppError(409, "Já existe uma categoria com esse identificador.");
+      }
+      throw error;
+    }
+
+    void auditService.log({
+      userId: user.userId,
+      action: "CREATE",
+      entity: "SystemConfig",
+      entityId: id,
+      details: `Categoria de módulo "${category.label}" criada.`,
+    });
+    return category;
+  }
+
+  async updateModuleCategory(user: AccessUser, id: string, data: UpdateSystemModuleCategoryInput) {
+    await this.assertCategoryExists(id);
+    const category = await prisma.systemModuleCategory.update({
+      where: { id },
+      data: {
+        label: data.label,
+        description: data.description,
+        color: data.color,
+        sortOrder: data.sortOrder,
+      },
+    });
+    void auditService.log({
+      userId: user.userId,
+      action: "UPDATE",
+      entity: "SystemConfig",
+      entityId: id,
+      details: `Categoria de módulo "${category.label}" atualizada.`,
+    });
+    return category;
+  }
+
+  async deleteModuleCategory(user: AccessUser, id: string) {
+    await this.assertCategoryExists(id);
+    const linked = await prisma.systemModule.count({ where: { category: id } });
+    if (linked > 0) {
+      throw new AppError(409, `A categoria tem ${linked} módulo(s) vinculado(s). Mova os módulos para outra categoria antes de excluí-la.`);
+    }
+    await prisma.systemModuleCategory.delete({ where: { id } });
+    void auditService.log({
+      userId: user.userId,
+      action: "DELETE",
+      entity: "SystemConfig",
+      entityId: id,
+      details: `Categoria de módulo "${id}" excluída.`,
+    });
+    return { id };
   }
 
   // ─── Presença de Usuários ───────────────────────────────────────────────────

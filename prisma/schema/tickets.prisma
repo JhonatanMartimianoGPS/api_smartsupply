@@ -42,7 +42,7 @@ model ServiceTicket {
   priority             TicketPriority @default(media)
   slaHours             Int            @default(48) @map("sla_hours")
   finalCost            Decimal?       @map("final_cost") @db.Decimal(10, 2)
-  autoSyncCost         Boolean        @default(false) @map("auto_sync_cost")
+  autoSyncCost         Boolean        @default(true) @map("auto_sync_cost")
   resolvedAt           DateTime?      @map("resolved_at")
   createdAt            DateTime       @default(now()) @map("created_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
@@ -60,6 +60,7 @@ model ServiceTicket {
   products    TicketProduct[]
 
   @@index([regionalId, contractId, status])
+  @@index([contractId, createdAt])
   @@index([createdById])
   @@index([assignedToId])
   @@map("service_tickets")
@@ -77,6 +78,7 @@ model TicketStep {
 
   ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
+  @@index([ticketId])
   @@map("ticket_steps")
 }
 
@@ -91,6 +93,7 @@ model TicketMessage {
   ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
 
+  @@index([ticketId, createdAt])
   @@map("ticket_messages")
 }
 
@@ -106,6 +109,7 @@ model TicketAttachment {
 
   ticket ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
+  @@index([ticketId])
   @@map("ticket_attachments")
 }
 
@@ -122,5 +126,6 @@ model TicketProduct {
   ticket  ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   product Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
 
+  @@index([ticketId])
   @@map("ticket_products")
 }

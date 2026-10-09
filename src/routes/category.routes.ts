@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { categoryController } from "../controllers/category.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { syncProductsForCategorySchema } from "../schemas/product.schema.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // ─── Categorias de Produto (/categories/products) ──────────────────────────
 router.get("/products", (req, res, next) =>
@@ -35,6 +39,12 @@ router.delete("/contracts/:id", authorize(["super_admin"]), (req, res, next) =>
 );
 router.post("/contracts/:id/sync-contracts", authorize(["super_admin", "admin"]), (req, res, next) =>
   categoryController.syncContracts(req, res, next),
+);
+router.post(
+  "/products/:id/sync-products",
+  authorize(["super_admin", "admin", "suprimentos"]),
+  validate(syncProductsForCategorySchema),
+  (req, res, next) => categoryController.syncProducts(req, res, next),
 );
 
 export const categoryRoutes = router;

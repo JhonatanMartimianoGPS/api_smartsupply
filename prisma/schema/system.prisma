@@ -6,6 +6,8 @@ model AppNotification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   ticketId  String?  @map("ticket_id")
+  // Tipo do aviso (new_order, order_status_change, new_ticket...): o frontend escolhe o ícone por ele
+  type      String   @default("info")
   title     String
   message   String
   link      String?
@@ -14,19 +16,40 @@ model AppNotification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
   @@map("app_notifications")
 }
 
+// Catálogo de módulos do sistema: os cards da tela inicial e o controle "módulo ativo/inativo".
+// O id é o slug fixo que o frontend conhece (ex.: "pedido_mensal"); não há criação de módulo pela API.
 model SystemModule {
-  id        String   @id
-  name      String
-  category  String
-  enabled   Boolean  @default(true)
-  roles     String[] @default([])
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id
+  name        String
+  description String?
+  category    String // id de SystemModuleCategory; o service valida que existe
+  enabled     Boolean  @default(true)
+  icon        String? // nome do ícone (lucide) usado pelo frontend
+  route       String?
+  badge       String?
+  roles       String[] @default([])
+  updatedById String?  @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("system_modules_config")
+}
+
+// Agrupa os módulos na tela de gerenciamento. O id é um slug escolhido na tela (ex.: "suprimentos").
+model SystemModuleCategory {
+  id          String   @id
+  label       String
+  description String?
+  color       String?  @default("indigo")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_module_categories")
 }
 
 model AppConfig {

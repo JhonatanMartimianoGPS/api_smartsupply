@@ -3,15 +3,13 @@ import { verifyPassword, hashPassword } from "../utils/password.js";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { CustomError } from "../middlewares/error.middleware.js";
 import { auditService } from "./audit.service.js";
+import { userService } from "./user.service.js";
 
 export class AuthService {
   static async login(email: string, password: string) {
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
-      include: {
-        regionals: { select: { regionalId: true } },
-        contracts: { select: { contractId: true } },
-      },
+      include: { regionals: { select: { regionalId: true } } },
     });
 
     if (!user) {
@@ -49,7 +47,6 @@ export class AuthService {
     });
 
     const regionalIds = user.regionals.map((r) => r.regionalId);
-    const contractIds = user.contracts.map((c) => c.contractId);
 
     const tokenPayload = {
       userId: user.id,
@@ -61,51 +58,12 @@ export class AuthService {
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
 
-    return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        department: user.department,
-        cargo: user.cargo,
-        phone: user.phone,
-        avatarUrl: user.avatarUrl,
-        regionals: regionalIds,
-        contracts: contractIds,
-      },
-    };
+    // O usuário da sessão tem o mesmo formato de GET /users/:id (docs/api-contract.md)
+    return { accessToken, refreshToken, user: await userService.getUserById(user.id) };
   }
 
   static async getMe(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        regionals: { select: { regionalId: true } },
-        contracts: { select: { contractId: true } },
-      },
-    });
-
-    if (!user) {
-      const error: CustomError = new Error("Usuário não encontrado");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      department: user.department,
-      cargo: user.cargo,
-      phone: user.phone,
-      avatarUrl: user.avatarUrl,
-      regionals: user.regionals.map((r) => r.regionalId),
-      contracts: user.contracts.map((c) => c.contractId),
-    };
+    return userService.getUserById(userId);
   }
 
   static async refreshToken(oldRefreshToken: string) {

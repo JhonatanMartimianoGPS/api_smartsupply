@@ -1,7 +1,29 @@
 import { prisma } from "../lib/prisma.js";
+import { notificationService } from "./notification.service.js";
 import { AppError } from "../middlewares/error.middleware.js";
 
+// Autor como vai na resposta (sem dados sensíveis)
+const AUTHOR = { select: { id: true, name: true, role: true, department: true, avatarUrl: true } };
+
+// Relações para montar os contadores e o "curti" do usuário atual
+const POST_INCLUDE = {
+  user: AUTHOR,
+  likes: { select: { userId: true } },
+  _count: { select: { comments: true, likes: true } },
+};
+
 export class FeedService {
+  // Publicação: o modelo (com o autor em `user`) mais likes_count, comments_count e has_liked
+  private formatPost(p: any, currentUserId?: string) {
+    const { likes, _count, ...post } = p;
+    return {
+      ...post,
+      likesCount: _count.likes,
+      commentsCount: _count.comments,
+      hasLiked: Boolean(currentUserId) && likes.some((l: any) => l.userId === currentUserId),
+    };
+  }
+
   async listPosts(currentUserId: string, params?: { page?: number; pageSize?: number }) {
     const page = Math.max(1, Number(params?.page) || 1);
     const pageSize = Math.max(1, Math.min(50, Number(params?.pageSize) || 10));
@@ -12,31 +34,13 @@ export class FeedService {
       prisma.feedPost.findMany({
         skip,
         take: pageSize,
-        include: {
-          user: { select: { id: true, name: true, role: true, department: true, avatarUrl: true } },
-          likes: { select: { userId: true } },
-          _count: { select: { comments: true, likes: true } },
-        },
+        include: POST_INCLUDE,
         orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
       }),
     ]);
 
-    const formatted = posts.map((p) => ({
-      id: p.id,
-      title: p.title,
-      content: p.content,
-      image_url: p.imageUrl,
-      pinned: p.pinned,
-      created_at: p.createdAt.toISOString(),
-      updated_at: p.updatedAt.toISOString(),
-      author: p.user,
-      likes_count: p._count.likes,
-      comments_count: p._count.comments,
-      has_liked: p.likes.some((l) => l.userId === currentUserId),
-    }));
-
     return {
-      posts: formatted,
+      items: posts.map((p) => this.formatPost(p, currentUserId)),
       total,
       page,
       pageSize,
@@ -52,18 +56,12 @@ export class FeedService {
         content: data.content,
         imageUrl: data.imageUrl,
       },
-      include: {
-        user: { select: { id: true, name: true, role: true, department: true, avatarUrl: true } },
-      },
+      include: POST_INCLUDE,
     });
 
-    return {
-      ...post,
-      author: post.user,
-      likes_count: 0,
-      comments_count: 0,
-      has_liked: false,
-    };
+    await notificationService.feedPostCreated({ postId: post.id, authorId: userId });
+
+    return this.formatPost(post, userId);
   }
 
   async updatePost(id: string, userId: string, data: { title?: string; content?: string }) {
@@ -71,7 +69,13 @@ export class FeedService {
     if (!post) throw new AppError(404, "Publicação não encontrada.");
     if (post.userId !== userId) throw new AppError(403, "Sem permissão para editar este post.");
 
-    return prisma.feedPost.update({ where: { id }, data });
+    // Só título e texto podem mudar por aqui (fixar tem rota própria)
+    const updated = await prisma.feedPost.update({
+      where: { id },
+      data: { title: data.title, content: data.content },
+      include: POST_INCLUDE,
+    });
+    return this.formatPost(updated, userId);
   }
 
   async deletePost(id: string, userId: string, isAdmin = false) {
@@ -83,14 +87,16 @@ export class FeedService {
     return { id };
   }
 
-  async togglePin(id: string) {
+  async togglePin(id: string, currentUserId?: string) {
     const post = await prisma.feedPost.findUnique({ where: { id } });
     if (!post) throw new AppError(404, "Publicação não encontrada.");
 
-    return prisma.feedPost.update({
+    const updated = await prisma.feedPost.update({
       where: { id },
       data: { pinned: !post.pinned },
+      include: POST_INCLUDE,
     });
+    return this.formatPost(updated, currentUserId);
   }
 
   async likePost(postId: string, userId: string) {
@@ -110,38 +116,21 @@ export class FeedService {
   }
 
   async listComments(postId: string) {
-    const comments = await prisma.feedComment.findMany({
+    return prisma.feedComment.findMany({
       where: { postId },
-      include: {
-        user: { select: { id: true, name: true, role: true, avatarUrl: true } },
-      },
+      include: { user: AUTHOR },
       orderBy: { createdAt: "asc" },
     });
-
-    return comments.map((c) => ({
-      id: c.id,
-      post_id: c.postId,
-      content: c.content,
-      created_at: c.createdAt.toISOString(),
-      author: c.user,
-    }));
   }
 
-  async addComment(postId: string, userId: string, content: string) {
-    const comment = await prisma.feedComment.create({
-      data: { postId, userId, content },
-      include: {
-        user: { select: { id: true, name: true, role: true, avatarUrl: true } },
-      },
+  async addComment(postId: string, userId: string, content: unknown) {
+    if (typeof content !== "string" || !content.trim()) {
+      throw new AppError(400, "O comentário não pode ficar vazio.");
+    }
+    return prisma.feedComment.create({
+      data: { postId, userId, content: content.trim() },
+      include: { user: AUTHOR },
     });
-
-    return {
-      id: comment.id,
-      post_id: comment.postId,
-      content: comment.content,
-      created_at: comment.createdAt.toISOString(),
-      author: comment.user,
-    };
   }
 
   async deleteComment(commentId: string, userId: string, isAdmin = false) {
@@ -150,7 +139,7 @@ export class FeedService {
     if (comment.userId !== userId && !isAdmin) throw new AppError(403, "Sem permissão.");
 
     await prisma.feedComment.delete({ where: { id: commentId } });
-    return { commentId };
+    return { id: commentId };
   }
 }
 

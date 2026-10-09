@@ -23,34 +23,7 @@ export class SupplierService {
       orderBy: { name: "asc" },
     });
 
-    return suppliers.map((s) => ({
-      id: s.id,
-      name: s.name,
-      tradeName: s.tradeName,
-      razao_social: s.razaoSocial,
-      cnpj: s.cnpj,
-      email: s.email,
-      phone: s.phone || s.telefone,
-      telefone: s.telefone || s.phone,
-      contato_nome: s.contatoNome,
-      observacoes: s.observacoes,
-      active: s.active,
-      is_active: s.active,
-      productsCount: s._count.products,
-      serviceRegionals: s.regionals.map((r) => ({
-        id: r.id,
-        supplierId: r.supplierId,
-        regionalId: r.regionalId,
-        regional: r.regional,
-        minOrderValue: r.minOrderValue ? Number(r.minOrderValue) : null,
-        deliveryLeadTimeDays: r.deliveryLeadTimeDays,
-        freeShippingThreshold: r.freeShippingThreshold ? Number(r.freeShippingThreshold) : null,
-        active: r.active,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      created_at: s.createdAt.toISOString(),
-      updated_at: s.updatedAt.toISOString(),
-    }));
+    return suppliers.map(({ _count, ...s }) => ({ ...s, productsCount: _count.products }));
   }
 
   async getSupplierById(id: string) {
@@ -66,44 +39,19 @@ export class SupplierService {
       throw new AppError(404, "Fornecedor não encontrado.");
     }
 
-    return {
-      id: s.id,
-      name: s.name,
-      tradeName: s.tradeName,
-      razao_social: s.razaoSocial,
-      cnpj: s.cnpj,
-      email: s.email,
-      phone: s.phone,
-      telefone: s.telefone,
-      contato_nome: s.contatoNome,
-      observacoes: s.observacoes,
-      active: s.active,
-      productsCount: s._count.products,
-      serviceRegionals: s.regionals.map((r) => ({
-        id: r.id,
-        supplierId: r.supplierId,
-        regionalId: r.regionalId,
-        regional: r.regional,
-        minOrderValue: r.minOrderValue ? Number(r.minOrderValue) : null,
-        deliveryLeadTimeDays: r.deliveryLeadTimeDays,
-        freeShippingThreshold: r.freeShippingThreshold ? Number(r.freeShippingThreshold) : null,
-        active: r.active,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      created_at: s.createdAt.toISOString(),
-      updated_at: s.updatedAt.toISOString(),
-    };
+    const { _count, ...supplier } = s;
+    return { ...supplier, productsCount: _count.products };
   }
 
   async createSupplier(data: {
     name: string;
     tradeName?: string;
-    razao_social?: string;
+    razaoSocial?: string;
     cnpj?: string;
     email?: string;
     phone?: string;
     telefone?: string;
-    contato_nome?: string;
+    contatoNome?: string;
     observacoes?: string;
     serviceRegionals?: Array<{
       regionalId: string;
@@ -123,12 +71,12 @@ export class SupplierService {
       data: {
         name: data.name,
         tradeName: data.tradeName,
-        razaoSocial: data.razao_social,
+        razaoSocial: data.razaoSocial,
         cnpj: data.cnpj,
         email: data.email,
         phone: data.phone || data.telefone,
         telefone: data.telefone || data.phone,
-        contatoNome: data.contato_nome,
+        contatoNome: data.contatoNome,
         observacoes: data.observacoes,
         regionals: data.serviceRegionals
           ? {
@@ -151,12 +99,12 @@ export class SupplierService {
     data: {
       name?: string;
       tradeName?: string;
-      razao_social?: string;
+      razaoSocial?: string;
       cnpj?: string;
       email?: string;
       phone?: string;
       telefone?: string;
-      contato_nome?: string;
+      contatoNome?: string;
       observacoes?: string;
       active?: boolean;
       serviceRegionals?: Array<{
@@ -190,12 +138,12 @@ export class SupplierService {
       data: {
         name: data.name,
         tradeName: data.tradeName,
-        razaoSocial: data.razao_social,
+        razaoSocial: data.razaoSocial,
         cnpj: data.cnpj,
         email: data.email,
         phone: data.phone || data.telefone,
         telefone: data.telefone || data.phone,
-        contatoNome: data.contato_nome,
+        contatoNome: data.contatoNome,
         observacoes: data.observacoes,
         active: data.active,
       },

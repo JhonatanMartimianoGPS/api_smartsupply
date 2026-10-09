@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { userController } from "../controllers/user.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 
 const router = Router();
 
 // Todas as rotas de usuários requerem autenticação
 router.use(authenticate);
+router.use(apiConvention);
 
 // Listagem de usuários mentionable (@user) disponível para todos os autenticados
 router.get("/mentionable", (req, res, next) => userController.listMentionable(req, res, next));

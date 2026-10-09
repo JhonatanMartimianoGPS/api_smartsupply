@@ -46,6 +46,7 @@ model Product {
 
   @@index([regionalId, categoryId, active])
   @@index([codigo])
+  @@index([supplierId])
   @@map("products")
 }
 

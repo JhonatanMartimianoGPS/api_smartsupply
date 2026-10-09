@@ -41,5 +41,5 @@ enum TicketPriority {
   baixa
   media
   alta
-  critica
+  urgente
 }

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { categoryService } from "../services/category.service.js";
+import { productService } from "../services/product.service.js";
 
 export class CategoryController {
   async listProductCategories(req: Request, res: Response, next: NextFunction) {
@@ -71,6 +72,15 @@ export class CategoryController {
   async deleteContractCategory(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await categoryService.deleteContractCategory(req.params.id as string);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async syncProducts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await productService.syncProductsForCategory(req.user!, req.params.id as string, req.body);
       res.json(result);
     } catch (error) {
       next(error);

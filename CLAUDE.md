@@ -53,22 +53,26 @@ Padrão do código (copie de `regional.*`):
 
 - Controller: `export class XController { async método(req, res, next) { try { … } catch (error) { next(error); } } }` e `export const xController = new XController();`. O service segue o mesmo molde: `export const xService = new XService();`.
 - Rota: `const router = Router(); router.use(authenticate);` e cada handler como `(req, res, next) => xController.método(req, res, next)`. Exporta `xRoutes`.
-- Erro esperado: `throw new AppError(status, 'Mensagem em português.')`. A resposta é `{ statusCode, message, error }`.
+- Erro esperado: `throw new AppError(status, 'Mensagem em português.')`. A resposta é `{ status_code, message, error }` (erro de validação traz também `details`).
 - Imports relativos **com extensão `.js`** (`'../lib/prisma.js'`), exigência do `NodeNext`.
 - Toda rota nova é registrada em `src/routes/index.ts`.
 - Rotas de escrita devem ter `authorize([...])`. Toda rota de `DELETE`/`PUT`/`PATCH` sobre dado de um dono precisa **checar perfil e escopo** (veja Acesso abaixo).
 - Nunca retorne campos sensíveis (`passwordHash`): use `select`.
 
-## Formato da API (convenção atual)
+## Formato da API (contrato)
 
-- O body costuma entrar em **camelCase** e as respostas saem em **snake_case** (`valor_unitario`, `regional_id`), por compatibilidade com o frontend herdado do Supabase.
-- O frontend ainda envia alguns formatos antigos (por exemplo, produto como `{ product: {...}, categoryIds }`). Quando for assim, traduza no controller e marque como **transitório**.
-- A convenção definitiva de nomes ainda será alinhada com o time. Não renomeie campos de resposta por conta própria: o frontend quebra sem aviso, porque não há erro de tipo entre os dois repositórios.
+A regra completa e a situação de cada recurso estão em `docs/api-contract.md`. Resumo:
+
+- **Resposta**: toda chave é o nome do campo do modelo Prisma em **snake_case** (`created_by_id`, `total_amount`); relação vira objeto com o nome em snake_case. **Entrada**: o cliente envia snake_case.
+- Isso é mecânico: `router.use(apiConvention)` (depois do `authenticate`) traduz entrada e saída. Schemas Zod e services usam os nomes do modelo em camelCase; não escreva formatadores "transitórios" nem devolva duas grafias da mesma chave.
+- Campo calculado (`competence_month`, `items_count`) também é snake_case e vai para a tabela do contrato.
+- Todo router liga o `apiConvention` logo após o `authenticate` (só `/stock/*` fica fora). Ao mudar o que uma rota devolve, ajuste `client_smartsupply/src/types/` no mesmo dia e o teste de contrato em `src/__tests__/contract.<recurso>.test.ts` (não há erro de tipo entre os repositórios; o teste é a trava).
+- Query params também em snake_case (`?contract_id=`); o middleware ainda aceita camelCase enquanto o front migra.
 
 ## Regras de negócio e acesso (no lugar de RLS e triggers)
 
-- **Orçamento**: o consumo é debitado quando o pedido é aprovado ou entregue e estornado quando sai desse estado (`order.service.ts`). O desconto por categoria de produto (`ContractProductCategoryBudgetPeriod`) ainda **não** está implementado.
-- **Acesso por regional/contrato**: no Supabase vinha da RLS. Hoje só o módulo de estoque filtra por regional. Ao tocar em pedidos, solicitações, chamados e contratos, **aplique escopo** do usuário (`req.user.regionals`) em vez de repetir o buraco. Não exponha dado de outra regional.
+- **Orçamento**: o consumo é debitado quando o pedido é aprovado ou entregue e estornado quando sai desse estado (`order.service.ts`). O consumo por categoria de produto (`ContractProductCategoryBudgetPeriod`) é recalculado a cada aprovação ou estorno e validado na criação e na edição de itens (`order.service.ts`).
+- **Acesso por regional/contrato**: no Supabase vinha da RLS. Use `accessService` (`src/services/access.service.ts`): `contractFilter(user)` nas listagens e `assertContractAccess(user, contractId)` para um contrato. Ele lê os vínculos do banco, e não do token. Pedidos já usam; ao tocar em solicitações, chamados, contratos e dashboard, aplique o mesmo escopo. O estoque ainda tem filtro próprio. Não exponha dado de outra regional.
 - **Notificações e histórico**: eram triggers. Hoje precisam ser criados explicitamente no service que muda o estado.
 - Antes de portar uma regra do Supabase, consulte a migration original em `client_smartsupply` (branch `main`, pasta `supabase/migrations`) para entender o comportamento exato.
 
@@ -84,9 +88,10 @@ Padrão do código (copie de `regional.*`):
 ## Banco, migrations e comandos perigosos
 
 - Subir o banco: o container se chama `smartsupply-db` (`docker-compose.yml`). O banco responde em `localhost:5432`.
-- **O estado das migrations não é confiável**: existem duas migrations "baseline" que conflitam e não há `migration_lock.toml`. O banco de desenvolvimento foi sincronizado com `prisma db push`. Não rode `migrate deploy` num banco novo esperando que funcione.
-- Scripts reais: `npm run dev`, `build`, `start`, `seed`, `test`, `prisma:generate`, `prisma:migrate`, `prisma:push`, `prisma:studio`.
-- **Nunca execute sem o dev pedir explicitamente**: `npx prisma migrate reset`, `npx prisma migrate deploy`, `docker compose down -v`, apagar ou editar migration já aplicada. Seed e `db push` alteram dados do banco local: só com pedido.
+- **Histórico de migrations**: `prisma/schema/migrations/` (dentro da pasta do schema: com o schema dividido em vários arquivos, o Prisma procura as migrations ali, e não em `prisma/migrations/`) tem uma baseline (`20261008120000_baseline`, o schema completo na data) e migrations incrementais por cima, mais o `migration_lock.toml`. Toda mudança de schema vira uma migration nova, versionada junto com o código. **Não use `db push`**: ele muda o banco sem gerar migration e faz o histórico divergir do schema.
+- Mudou o schema? Edite `prisma/schema/`, rode `npm run prisma:migrate -- --name <descricao-curta-em-ingles>`, leia o `migration.sql` gerado e commite a pasta nova junto com o schema.
+- Scripts reais: `npm run dev`, `build`, `start`, `seed`, `test`, `prisma:generate`, `prisma:migrate`, `prisma:studio`.
+- **Nunca execute sem o dev pedir explicitamente**: `npx prisma migrate reset`, `npx prisma migrate deploy`, `npx prisma migrate resolve`, `npx prisma db push`, `docker compose down -v`, apagar ou editar migration já aplicada. Seed e migrations alteram o banco local: só com pedido.
 - Antes de `npm run prisma:migrate`, mostre o que vai mudar e peça confirmação.
 
 ## Ambiente

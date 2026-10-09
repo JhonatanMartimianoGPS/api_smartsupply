@@ -62,7 +62,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    statusCode: 429,
+    status_code: 429,
     message: "Muitas requisições originadas deste IP. Tente novamente em alguns minutos.",
     error: "Too Many Requests",
   },
@@ -74,14 +74,15 @@ const generalLimiter = rateLimit({
 });
 app.use(generalLimiter);
 
-// 8. Rate Limiting estrito para proteção de força bruta em autenticação (15 tentativas / 15min)
+// 8. Rate Limiting estrito para proteção de força bruta em autenticação (15 tentativas / 15min).
+// AUTH_RATE_LIMIT_MAX só existe para rodar a suíte de testes várias vezes no ambiente local.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    statusCode: 429,
+    status_code: 429,
     message: "Muitas tentativas de login consecutivas. Por segurança, tente novamente em 15 minutos.",
     error: "Too Many Requests",
   },
@@ -134,7 +135,7 @@ app.use("/api/v1", apiRouter);
 // 13. Rota 404 para rotas não mapeadas
 app.use((req, res) => {
   res.status(404).json({
-    statusCode: 404,
+    status_code: 404,
     message: `Rota ${req.method} ${req.path} não encontrada no GPS Bridge Server`,
     error: "Not Found",
   });

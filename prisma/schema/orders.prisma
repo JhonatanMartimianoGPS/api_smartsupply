@@ -26,6 +26,7 @@ model Order {
   @@index([contractId, status, createdAt])
   @@index([status, mes, ano])
   @@index([createdById])
+  @@index([contractId, ano, mes, status])
   @@map("orders")
 }
 
@@ -39,6 +40,9 @@ model OrderItem {
   productCodigoSnapshot      String?  @map("product_codigo_snapshot")
   productUnidadeSnapshot     String?  @map("product_unidade_snapshot")
   productCategoriaSnapshot   String?  @map("product_categoria_snapshot")
+  // Id da categoria do produto no momento do pedido. Sem FK de propósito: é um histórico,
+  // e recategorizar o produto depois não pode mudar o consumo de pedidos antigos.
+  productCategoryIdSnapshot  String?  @map("product_category_id_snapshot")
   productFornecedorSnapshot  String?  @map("product_fornecedor_snapshot")
   productTabelaSnapshot      Decimal? @map("product_tabela_snapshot") @db.Decimal(10, 2)
   productImageUrlSnapshot    String?  @map("product_image_url_snapshot")
@@ -63,6 +67,7 @@ model OrderHistory {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId, createdAt])
   @@map("order_history")
 }
 
@@ -79,6 +84,7 @@ model OrderDeliveryDivergence {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId])
   @@map("order_delivery_divergences")
 }
 
@@ -95,5 +101,6 @@ model OrderIssueReport {
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId])
   @@map("order_issue_reports")
 }

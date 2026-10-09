@@ -1,15 +1,42 @@
 import { prisma } from "../lib/prisma.js";
+import { AppError } from "../middlewares/error.middleware.js";
+import { accessService, type AccessUser } from "./access.service.js";
+
+// Teto de eventos por tipo no histórico ("all" não pode varrer a tabela inteira); ficam os mais recentes
+const MAX_HISTORY_EVENTS = 5000;
+
+interface DashboardParams {
+  periodMonth?: string;
+  regionalId?: string | null;
+}
+
+/** Contratos que o usuário pode ver, e dentro deles só a regional escolhida no filtro (se houver). */
+function contractScope(user: AccessUser, regionalId?: string | null) {
+  const access = accessService.contractFilter(user);
+  return regionalId ? { AND: [access, { regionalId }] } : access;
+}
+
+/**
+ * O front manda "YYYY-MM-01", "YYYY-MM" ou "all" (histórico todo, sem filtro de mês).
+ * Qualquer outro texto é erro de quem chamou.
+ */
+function parsePeriod(periodMonth?: string): { ano: number; mes: number } | undefined {
+  if (!periodMonth || periodMonth === "all") return undefined;
+  const match = /^(\d{4})-(\d{2})(?:-01)?$/.exec(periodMonth);
+  const mes = match ? Number(match[2]) : 0;
+  if (!match || mes < 1 || mes > 12) {
+    throw new AppError(400, "Mês de competência inválido. Use o formato AAAA-MM.");
+  }
+  return { ano: Number(match[1]), mes };
+}
 
 export class DashboardService {
-  async getOrderStats(params?: { periodMonth?: string; regionalId?: string | null }) {
-    const where: any = {};
-    if (params?.regionalId) where.contract = { regionalId: params.regionalId };
-    if (params?.periodMonth) {
-      const [ano, mes] = params.periodMonth.split("-").map(Number);
-      if (ano && mes) {
-        where.ano = ano;
-        where.mes = mes;
-      }
+  async getOrderStats(user: AccessUser, params?: DashboardParams) {
+    const where: any = { contract: contractScope(user, params?.regionalId) };
+    const period = parsePeriod(params?.periodMonth);
+    if (period) {
+      where.ano = period.ano;
+      where.mes = period.mes;
     }
 
     const orders = await prisma.order.findMany({
@@ -56,52 +83,51 @@ export class DashboardService {
     };
   }
 
-  async getContractSpending(params?: { periodMonth?: string; regionalId?: string | null }) {
-    const where: any = { active: true };
-    if (params?.regionalId) where.regionalId = params.regionalId;
+  async getContractSpending(user: AccessUser, params?: DashboardParams) {
+    const period = parsePeriod(params?.periodMonth);
 
     const contracts = await prisma.contract.findMany({
-      where,
+      where: { AND: [{ active: true }, contractScope(user, params?.regionalId)] },
       include: {
         regional: true,
-        category: true,
-        orders: params?.periodMonth
-          ? {
-              where: {
-                ano: Number(params.periodMonth.split("-")[0]),
-                mes: Number(params.periodMonth.split("-")[1]),
-                status: { in: ["aprovado", "entregue"] },
-              },
-            }
-          : {
-              where: { status: { in: ["aprovado", "entregue"] } },
-            },
+        category: { include: { regional: { select: { name: true } } } },
+        orders: {
+          where: { status: { in: ["aprovado", "entregue"] }, ...(period ?? {}) },
+          select: { totalAmount: true },
+        },
       },
+      orderBy: { name: "asc" },
     });
 
     return contracts.map((c) => {
       const totalBudget = Number(c.totalBudget);
-      const usedBudget = c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
-      const remainingBudget = Math.max(0, totalBudget - usedBudget);
-      const percentage = totalBudget > 0 ? (usedBudget / totalBudget) * 100 : 0;
+      const totalSpent = c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
+      const remainingBudget = Math.max(0, totalBudget - totalSpent);
+      const percentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
       return {
         contractId: c.id,
         contractName: c.name,
         regionalName: c.regional.name,
-        categoryName: c.category?.name || "Geral",
+        categoryId: c.category?.id ?? null,
+        categoryName: c.category?.name ?? "Geral",
+        categoryColor: c.category?.color ?? null,
+        categoryRegionalName: c.category?.regional?.name ?? null,
         totalBudget,
-        usedBudget,
+        totalSpent,
         remainingBudget,
         percentage,
+        budgetLocked: c.budgetLocked,
         ordersCount: c.orders.length,
       };
     });
   }
 
-  async getMonthlySpending(params?: { regionalId?: string | null }) {
-    const where: any = { status: { in: ["aprovado", "entregue"] } };
-    if (params?.regionalId) where.contract = { regionalId: params.regionalId };
+  async getMonthlySpending(user: AccessUser, params?: { regionalId?: string | null }) {
+    const where: any = {
+      status: { in: ["aprovado", "entregue"] },
+      contract: contractScope(user, params?.regionalId),
+    };
 
     const orders = await prisma.order.findMany({
       where,
@@ -126,77 +152,78 @@ export class DashboardService {
       return {
         month,
         monthLabel,
-        total: data.totalSpent,
         totalSpent: data.totalSpent,
-        totalValue: data.totalSpent,
-        orderCount: data.ordersCount,
         ordersCount: data.ordersCount,
       };
     });
   }
 
-  async getCategorySpending(params?: { periodMonth?: string; regionalId?: string | null }) {
-    const where: any = { active: true };
-    if (params?.regionalId) where.regionalId = params.regionalId;
+  async getCategorySpending(user: AccessUser, params?: DashboardParams) {
+    const period = parsePeriod(params?.periodMonth);
+    const scope = { AND: [{ active: true }, contractScope(user, params?.regionalId)] };
 
+    // Só entram categorias que têm pelo menos um contrato visível para o usuário
     const categories = await prisma.contractCategory.findMany({
-      where,
+      where: { active: true, contracts: { some: scope } },
       include: {
+        regional: { select: { name: true } },
         contracts: {
+          where: scope,
           include: {
-            orders: params?.periodMonth
-              ? {
-                  where: {
-                    ano: Number(params.periodMonth.split("-")[0]),
-                    mes: Number(params.periodMonth.split("-")[1]),
-                    status: { in: ["aprovado", "entregue"] },
-                  },
-                }
-              : {
-                  where: { status: { in: ["aprovado", "entregue"] } },
-                },
+            orders: { where: { status: { in: ["aprovado", "entregue"] }, ...(period ?? {}) }, select: { totalAmount: true } },
           },
         },
       },
+      orderBy: { name: "asc" },
     });
 
     return categories.map((cat) => {
       let totalSpent = 0;
       let totalBudget = 0;
+      let ordersCount = 0;
 
       for (const c of cat.contracts) {
         totalBudget += Number(c.totalBudget);
         totalSpent += c.orders.reduce((acc, o) => acc + Number(o.totalAmount), 0);
+        ordersCount += c.orders.length;
       }
 
       return {
         categoryId: cat.id,
         categoryName: cat.name,
-        category: cat.name,
+        categoryRegionalName: cat.regional?.name ?? null,
         color: cat.color || "#3B82F6",
         totalBudget,
         totalSpent,
-        total: totalSpent,
+        ordersCount,
         percentage: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
       };
     });
   }
 
-  async getProductAndSupplierSpending(params?: { periodMonth?: string; regionalId?: string | null }) {
-    const whereOrder: any = { status: { in: ["aprovado", "entregue"] } };
-    if (params?.regionalId) whereOrder.contract = { regionalId: params.regionalId };
-    if (params?.periodMonth) {
-      const [ano, mes] = params.periodMonth.split("-").map(Number);
-      if (ano && mes) {
-        whereOrder.ano = ano;
-        whereOrder.mes = mes;
-      }
+  async getProductAndSupplierSpending(user: AccessUser, params?: DashboardParams) {
+    const whereOrder: any = {
+      status: { in: ["aprovado", "entregue"] },
+      contract: contractScope(user, params?.regionalId),
+    };
+    const period = parsePeriod(params?.periodMonth);
+    if (period) {
+      whereOrder.ano = period.ano;
+      whereOrder.mes = period.mes;
     }
 
     const items = await prisma.orderItem.findMany({
       where: { order: whereOrder },
-      include: {
-        product: { include: { category: true } },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        unitPrice: true,
+        productNameSnapshot: true,
+        productCodigoSnapshot: true,
+        productCategoriaSnapshot: true,
+        productFornecedorSnapshot: true,
+        product: { select: { name: true, codigo: true, category: { select: { name: true } } } },
         order: { select: { contractId: true } },
       },
     });
@@ -262,9 +289,7 @@ export class DashboardService {
         productCode: p.productCode,
         category: p.category,
         totalQuantity: p.quantity,
-        quantity: p.quantity,
         totalSpent: p.totalSpent,
-        totalValue: p.totalSpent,
         contractCount: p.contracts.size,
       }));
 
@@ -272,39 +297,67 @@ export class DashboardService {
       .sort((a, b) => b.totalSpent - a.totalSpent)
       .slice(0, 10)
       .map((s) => ({
-        supplier: s.supplierName,
         supplierName: s.supplierName,
         totalSpent: s.totalSpent,
-        totalValue: s.totalSpent,
         totalQuantity: s.totalQuantity,
         ordersCount: s.ordersCount,
-        orderCount: s.ordersCount,
       }));
 
     return { topProducts, topSuppliers };
   }
 
-  async getApprovalHistory(params?: { monthKey?: string; regionalId?: string | null }) {
-    const where: any = { action: { contains: "Status" } };
-    if (params?.regionalId) where.order = { contract: { regionalId: params.regionalId } };
+  /**
+   * Base do gráfico "pedidos criados x aprovados por dia". Cada linha é um evento:
+   * "criado" (data de criação do pedido) ou "aprovado" (transição de status para aprovado).
+   * monthKey: "YYYY-MM" (mês em horário de Brasília) ou "all". Ordem crescente de data.
+   */
+  async getApprovalHistory(user: AccessUser, params?: { monthKey?: string; regionalId?: string | null }) {
+    const period = parsePeriod(params?.monthKey);
+    const contract = contractScope(user, params?.regionalId);
 
-    const history = await prisma.orderHistory.findMany({
-      where,
-      include: {
-        order: { include: { contract: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    // O mês vai de 00:00 de Brasília (UTC-3) do dia 1 até 00:00 do mês seguinte
+    const range = period
+      ? {
+          gte: new Date(Date.UTC(period.ano, period.mes - 1, 1, 3)),
+          lt: new Date(Date.UTC(period.ano, period.mes, 1, 3)),
+        }
+      : undefined;
 
-    return history.map((h) => ({
-      id: h.id,
-      orderId: h.orderId,
-      contractName: h.order.contract.name,
-      action: h.action,
-      details: h.details,
-      createdAt: h.createdAt.toISOString(),
-    }));
+    const [created, approvals] = await Promise.all([
+      prisma.order.findMany({
+        where: { contract, ...(range ? { createdAt: range } : {}) },
+        select: { id: true, createdById: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: MAX_HISTORY_EVENTS,
+      }),
+      prisma.orderHistory.findMany({
+        where: { newStatus: "aprovado", order: { contract }, ...(range ? { createdAt: range } : {}) },
+        select: { id: true, orderId: true, userId: true, details: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: MAX_HISTORY_EVENTS,
+      }),
+    ]);
+
+    const rows = [
+      ...created.map((o) => ({
+        id: `criado-${o.id}`,
+        action: "criado",
+        created_at: o.createdAt.toISOString(),
+        order_id: o.id,
+        user_id: o.createdById,
+        details: null as string | null,
+      })),
+      ...approvals.map((h) => ({
+        id: h.id,
+        action: "aprovado",
+        created_at: h.createdAt.toISOString(),
+        order_id: h.orderId,
+        user_id: h.userId,
+        details: h.details,
+      })),
+    ];
+
+    return rows.sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 }
 

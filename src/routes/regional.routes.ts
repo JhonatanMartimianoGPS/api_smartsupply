@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { regionalController } from "../controllers/regional.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 router.get("/", (req, res, next) => regionalController.list(req, res, next));
 router.get("/:id", (req, res, next) => regionalController.getById(req, res, next));

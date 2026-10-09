@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { notificationController } from "../controllers/notification.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 router.get("/", (req, res, next) => notificationController.list(req, res, next));
 router.post("/read-all", (req, res, next) => notificationController.markAllAsRead(req, res, next));

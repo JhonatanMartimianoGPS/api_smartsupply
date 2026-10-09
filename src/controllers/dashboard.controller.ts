@@ -1,13 +1,21 @@
 import type { Request, Response, NextFunction } from "express";
+import { AppError } from "../middlewares/error.middleware.js";
 import { dashboardService } from "../services/dashboard.service.js";
+
+// Parâmetros de URL podem chegar como lista ou objeto (?a=1&a=2): só aceitamos texto.
+// Ausente ou vazio vale "sem filtro"; qualquer outro formato é erro de quem chamou.
+const asString = (value: unknown) => {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string") throw new AppError(400, "Parâmetro inválido.");
+  return value;
+};
 
 export class DashboardController {
   async getOrderStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const { periodMonth, regionalId } = req.query;
-      const stats = await dashboardService.getOrderStats({
-        periodMonth: periodMonth as string,
-        regionalId: regionalId as string,
+      const stats = await dashboardService.getOrderStats(req.user!, {
+        periodMonth: asString(req.query.periodMonth),
+        regionalId: asString(req.query.regionalId),
       });
       res.json(stats);
     } catch (error) {
@@ -17,10 +25,9 @@ export class DashboardController {
 
   async getContractSpending(req: Request, res: Response, next: NextFunction) {
     try {
-      const { periodMonth, regionalId } = req.query;
-      const spending = await dashboardService.getContractSpending({
-        periodMonth: periodMonth as string,
-        regionalId: regionalId as string,
+      const spending = await dashboardService.getContractSpending(req.user!, {
+        periodMonth: asString(req.query.periodMonth),
+        regionalId: asString(req.query.regionalId),
       });
       res.json(spending);
     } catch (error) {
@@ -30,9 +37,8 @@ export class DashboardController {
 
   async getMonthlySpending(req: Request, res: Response, next: NextFunction) {
     try {
-      const { regionalId } = req.query;
-      const spending = await dashboardService.getMonthlySpending({
-        regionalId: regionalId as string,
+      const spending = await dashboardService.getMonthlySpending(req.user!, {
+        regionalId: asString(req.query.regionalId),
       });
       res.json(spending);
     } catch (error) {
@@ -42,10 +48,9 @@ export class DashboardController {
 
   async getCategorySpending(req: Request, res: Response, next: NextFunction) {
     try {
-      const { periodMonth, regionalId } = req.query;
-      const spending = await dashboardService.getCategorySpending({
-        periodMonth: periodMonth as string,
-        regionalId: regionalId as string,
+      const spending = await dashboardService.getCategorySpending(req.user!, {
+        periodMonth: asString(req.query.periodMonth),
+        regionalId: asString(req.query.regionalId),
       });
       res.json(spending);
     } catch (error) {
@@ -55,10 +60,9 @@ export class DashboardController {
 
   async getProductAndSupplierSpending(req: Request, res: Response, next: NextFunction) {
     try {
-      const { periodMonth, regionalId } = req.query;
-      const data = await dashboardService.getProductAndSupplierSpending({
-        periodMonth: periodMonth as string,
-        regionalId: regionalId as string,
+      const data = await dashboardService.getProductAndSupplierSpending(req.user!, {
+        periodMonth: asString(req.query.periodMonth),
+        regionalId: asString(req.query.regionalId),
       });
       res.json(data);
     } catch (error) {
@@ -68,10 +72,9 @@ export class DashboardController {
 
   async getApprovalHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const { monthKey, regionalId } = req.query;
-      const history = await dashboardService.getApprovalHistory({
-        monthKey: monthKey as string,
-        regionalId: regionalId as string,
+      const history = await dashboardService.getApprovalHistory(req.user!, {
+        monthKey: asString(req.query.monthKey),
+        regionalId: asString(req.query.regionalId),
       });
       res.json(history);
     } catch (error) {

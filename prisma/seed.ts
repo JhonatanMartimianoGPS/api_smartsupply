@@ -914,6 +914,216 @@ async function main() {
       regionalId: spRegional.id,
       imageUrl: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80",
     },
+    // ── CATÁLOGO ADICIONAL: RJ (Galeão), MG (Betim), DF e PR ─────────────────────
+    {
+      codigo: "LIMP-010",
+      name: "Limpa Vidros Concentrado 5L",
+      descricao: "Limpa vidros de secagem rápida, sem deixar manchas ou resíduos. Indicado para fachadas internas, divisórias e áreas envidraçadas de terminais.",
+      unidade: "GL",
+      tabela: 32.9,
+      categoryCode: "HIG_LIMP",
+      supplier: rioquimica,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1584744982491-665216d95f8b?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "LIMP-011",
+      name: "Desinfetante Hospitalar Lavanda 5L",
+      descricao: "Desinfetante de uso geral com ação bactericida e fragrância suave de lavanda. Diluível, para pisos e superfícies de áreas de grande circulação.",
+      unidade: "GL",
+      tabela: 24.5,
+      categoryCode: "HIG_LIMP",
+      supplier: rioquimica,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1585421514284-efb74c2b69ba?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "DESC-010",
+      name: "Papel Toalha Bobina 20cm x 200m",
+      descricao: "Bobina de papel toalha 100% celulose para dispensers de alto fluxo, com alta absorção e resistência.",
+      unidade: "PC",
+      tabela: 69.0,
+      categoryCode: "DESC_COPA",
+      supplier: sulPack,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "DESC-011",
+      name: "Copo Descartável 300ml (cx 2000 un)",
+      descricao: "Copo de polipropileno atóxico para bebidas frias e quentes, em caixa fechada com 2000 unidades.",
+      unidade: "CX",
+      tabela: 94.0,
+      categoryCode: "DESC_COPA",
+      supplier: sulPack,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1584556812952-905ffd0c611a?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-011",
+      name: "Colete Refletivo de Sinalização com Faixas",
+      descricao: "Colete em tela com faixas retrorrefletivas para identificação de equipes em áreas operacionais e pátios.",
+      unidade: "UN",
+      tabela: 39.9,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-012",
+      name: "Protetor Auricular Plug de Silicone (cx 50 pares)",
+      descricao: "Protetor auricular tipo plug com cordão, reutilizável, para ambientes de ruído contínuo.",
+      unidade: "CX",
+      tabela: 58.0,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "QUIM-006",
+      name: "Removedor de Cera Concentrado 5L",
+      descricao: "Removedor alcalino de ceras e acabamentos acrílicos, para decapagem de pisos antes de nova aplicação.",
+      unidade: "GL",
+      tabela: 61.0,
+      categoryCode: "QUIM_CONC",
+      supplier: rioquimica,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1584744982491-665216d95f8b?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EQP-011",
+      name: "Placa Sinalizadora de Piso Molhado",
+      descricao: "Placa dobrável em polipropileno amarelo com pictograma de alerta bilíngue.",
+      unidade: "UN",
+      tabela: 74.9,
+      categoryCode: "EQUIP_ACES",
+      supplier: cleanPro,
+      regionalId: rjRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "QUIM-007",
+      name: "Desengraxante Industrial Biodegradável 20L",
+      descricao: "Desengraxante de alto rendimento para pisos, máquinas e áreas de manutenção. Biodegradável e de baixa espuma.",
+      unidade: "BD",
+      tabela: 189.0,
+      categoryCode: "QUIM_CONC",
+      supplier: minasclean,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1585421514284-efb74c2b69ba?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "QUIM-008",
+      name: "Detergente Alcalino Clorado 5L",
+      descricao: "Detergente alcalino clorado para higienização pesada de áreas de produção e refeitórios industriais.",
+      unidade: "GL",
+      tabela: 47.5,
+      categoryCode: "QUIM_CONC",
+      supplier: minasclean,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-013",
+      name: "Capacete de Segurança com Jugular Classe B",
+      descricao: "Capacete em polietileno de alta densidade com suspensão de 4 pontos e jugular, para áreas industriais.",
+      unidade: "UN",
+      tabela: 36.9,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-014",
+      name: "Luva de Raspa Cano Longo",
+      descricao: "Luva de raspa de couro com reforço, cano longo, para manuseio de materiais abrasivos e soldagem leve.",
+      unidade: "PR",
+      tabela: 21.5,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1584467735871-8e85353a8413?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-015",
+      name: "Óculos de Proteção Ampla Visão Antiembaçante",
+      descricao: "Óculos de ampla visão com lente de policarbonato incolor, tratamento antiembaçante e antirrisco.",
+      unidade: "UN",
+      tabela: 17.9,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1586942593568-29361efcd571?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-016",
+      name: "Bota de Segurança Bico de Aço nº 42",
+      descricao: "Bota de couro com biqueira de aço e solado antiderrapante, para áreas industriais.",
+      unidade: "PR",
+      tabela: 129.0,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EQP-012",
+      name: "Carro Funcional de Limpeza Industrial",
+      descricao: "Carro com balde espremedor, suporte para sacos e bandeja organizadora, em polipropileno reforçado.",
+      unidade: "UN",
+      tabela: 890.0,
+      categoryCode: "EQUIP_ACES",
+      supplier: minasclean,
+      regionalId: mgRegional.id,
+      imageUrl: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "LIMP-012",
+      name: "Álcool Líquido 70% 1L",
+      descricao: "Álcool etílico 70% para assepsia de superfícies, em frasco de 1 litro.",
+      unidade: "FR",
+      tabela: 11.9,
+      categoryCode: "HIG_LIMP",
+      supplier: cleanPro,
+      regionalId: regionalsMap.get("DF")!.id,
+      imageUrl: "https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "DESC-012",
+      name: "Saco de Lixo Azul 60L (pacote 100 un)",
+      descricao: "Saco de lixo azul reforçado de 60 litros para coleta seletiva, pacote com 100 unidades.",
+      unidade: "PC",
+      tabela: 38.5,
+      categoryCode: "DESC_COPA",
+      supplier: sulPack,
+      regionalId: regionalsMap.get("DF")!.id,
+      imageUrl: "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "LIMP-013",
+      name: "Sabonete Líquido Neutro 5L",
+      descricao: "Sabonete líquido neutro e hipoalergênico para dispensers de lavatórios coletivos.",
+      unidade: "GL",
+      tabela: 29.9,
+      categoryCode: "HIG_LIMP",
+      supplier: cleanPro,
+      regionalId: regionalsMap.get("PR")!.id,
+      imageUrl: "https://images.unsplash.com/photo-1608248597359-0f4931a2928d?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      codigo: "EPI-017",
+      name: "Máscara PFF2 sem Válvula (cx 50 un)",
+      descricao: "Respirador descartável PFF2 com clipe nasal e tirantes elásticos, em caixa com 50 unidades.",
+      unidade: "CX",
+      tabela: 98.0,
+      categoryCode: "EPI_SEG",
+      supplier: safeTech,
+      regionalId: regionalsMap.get("PR")!.id,
+      imageUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
+    },
   ];
 
   const productsMap = new Map<string, any>();
@@ -1185,7 +1395,7 @@ async function main() {
           contractId: sirioLibanes.id,
           createdById: assistente.id,
           status: "pendente",
-          step: "gestor",
+          step: "aguardando_aprovacao_gestor",
           notes: "Aquisição emergencial de dispensers automáticos com sensor e refis para ampliação da UTI Adulto.",
           totalAmount: 2265.0,
           items: {
@@ -1206,7 +1416,7 @@ async function main() {
             create: {
               userId: assistente.id,
               action: "Criação da Solicitação Especial",
-              step: "gestor",
+              step: "aguardando_aprovacao_gestor",
               notes: "Necessidade após inauguração de 10 novos leitos de UTI.",
             },
           },
@@ -1216,7 +1426,7 @@ async function main() {
 
     // Solicitação 2: Em análise na etapa Suprimentos
     const existingSol2 = await prisma.solicitation.findFirst({
-      where: { contractId: torreSantander.id, status: "em_analise" },
+      where: { contractId: torreSantander.id, status: "pendente" },
     });
 
     if (!existingSol2) {
@@ -1224,8 +1434,8 @@ async function main() {
         data: {
           contractId: torreSantander.id,
           createdById: assistente.id,
-          status: "em_analise",
-          step: "suprimentos",
+          status: "pendente",
+          step: "aguardando_compra_suprimentos",
           notes: "Tapetes ergonômicos antifadiga de borracha para bancadas de recepção e triagem de encomendas.",
           totalAmount: 870.0,
           items: {
@@ -1239,8 +1449,8 @@ async function main() {
           },
           history: {
             create: [
-              { userId: assistente.id, action: "Criação da Solicitação", step: "gestor", notes: "Melhoria de ergonomia solicitada pelo SESMT" },
-              { userId: gestor?.id || assistente.id, action: "Aprovação pelo Gestor", step: "suprimentos", notes: "Verba aprovada; encaminhado para cotação em Suprimentos" },
+              { userId: assistente.id, action: "Criação da Solicitação", step: "aguardando_aprovacao_gestor", notes: "Melhoria de ergonomia solicitada pelo SESMT" },
+              { userId: gestor?.id || assistente.id, action: "Aprovação pelo Gestor", step: "aguardando_compra_suprimentos", notes: "Verba aprovada; encaminhado para cotação em Suprimentos" },
             ],
           },
         },
@@ -1249,7 +1459,7 @@ async function main() {
 
     // Solicitação 3: Concluída / Aprovada
     const existingSol3 = await prisma.solicitation.findFirst({
-      where: { contractId: sirioLibanes.id, status: "aprovada" },
+      where: { contractId: sirioLibanes.id, status: "concluido" },
     });
 
     if (!existingSol3) {
@@ -1257,8 +1467,8 @@ async function main() {
         data: {
           contractId: sirioLibanes.id,
           createdById: assistente.id,
-          status: "aprovada",
-          step: "finalizado",
+          status: "concluido",
+          step: "concluido",
           notes: "Lavadora de alta pressão profissional para higienização e esterilização de docas de ambulâncias.",
           totalAmount: 2450.0,
           items: {
@@ -1272,9 +1482,9 @@ async function main() {
           },
           history: {
             create: [
-              { userId: assistente.id, action: "Solicitação Aberta", step: "gestor" },
-              { userId: gestor?.id || assistente.id, action: "Aprovação Gestor", step: "suprimentos" },
-              { userId: suprimentosUser?.id || assistente.id, action: "Cotação & Emissão de Pedido de Compra", step: "finalizado", notes: "Ordem de compra #OC-9982 gerada com entrega programada." },
+              { userId: assistente.id, action: "Solicitação Aberta", step: "aguardando_aprovacao_gestor" },
+              { userId: gestor?.id || assistente.id, action: "Aprovação Gestor", step: "aguardando_compra_suprimentos" },
+              { userId: suprimentosUser?.id || assistente.id, action: "Cotação & Emissão de Pedido de Compra", step: "concluido", notes: "Ordem de compra #OC-9982 gerada com entrega programada." },
             ],
           },
         },
@@ -1478,26 +1688,37 @@ async function main() {
   // ───────────────────────────────────────────────────────────────────────────
   // 13. MÓDULOS DO SISTEMA (system_modules_config)
   // ───────────────────────────────────────────────────────────────────────────
+  const moduleCategoriesData = [
+    { id: "suprimentos", label: "Suprimentos & Estoque", description: "Gestão de suprimentos, compras, cotações e estoque", color: "orange", sortOrder: 1 },
+    { id: "servicos", label: "Serviços & Chamados", description: "Gestão predial e abertura de chamados", color: "blue", sortOrder: 2 },
+    { id: "comunicacao", label: "Comunicação & Equipe", description: "Feed corporativo, contatos e avisos gerais", color: "teal", sortOrder: 3 },
+    { id: "inteligencia", label: "Inteligência Artificial", description: "Assistente IA Bridget e automações", color: "purple", sortOrder: 4 },
+  ];
+  for (const c of moduleCategoriesData) {
+    await prisma.systemModuleCategory.upsert({ where: { id: c.id }, update: c, create: c });
+  }
+
+  // Mesmos textos, ícones e rotas que o frontend usa como padrão (DEFAULT_SYSTEM_MODULES)
   const modulesConfigData = [
-    { id: "pedido_mensal", name: "Pedido Mensal", category: "suprimentos", enabled: true, roles: ["assistente", "gestor", "admin", "super_admin"] },
-    { id: "suprimentos", name: "Gestão de Suprimentos", category: "suprimentos", enabled: true, roles: ["gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "solicitacoes_especiais", name: "Solicitações Especiais", category: "suprimentos", enabled: true, roles: ["assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "fornecedores", name: "Fornecedores & Cotações", category: "suprimentos", enabled: true, roles: ["suprimentos", "admin", "super_admin"] },
-    { id: "estoque", name: "Gestão de Estoque (WMS)", category: "suprimentos", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "chamados", name: "Central de Chamados", category: "servicos", enabled: true, roles: ["colaborador", "assistente", "gestor", "admin", "super_admin"] },
-    { id: "feed", name: "Feed de Comunicação", category: "comunicacao", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "equipe", name: "Equipe GPS Bridge", category: "comunicacao", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
-    { id: "bridget", name: "Bridget (Assistente IA)", category: "inteligencia", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "pedido_mensal", name: "Pedido Mensal", description: "Lançamento de pedidos regulares de suprimentos por contrato", category: "suprimentos", icon: "Package", route: "/pedido-mensal", badge: "Core", enabled: true, roles: ["assistente", "gestor", "admin", "super_admin"] },
+    { id: "suprimentos", name: "Gestão de Suprimentos", description: "Gestão completa de suprimentos, pedidos, contratos e aprovações", category: "suprimentos", icon: "ShoppingCart", route: "/suprimentos", badge: "Gestão", enabled: true, roles: ["gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "solicitacoes_especiais", name: "Solicitações Especiais", description: "Pedidos extras e solicitações fora do orçamento mensal", category: "suprimentos", icon: "Zap", route: "/nova-solicitacao", badge: null, enabled: true, roles: ["assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "fornecedores", name: "Fornecedores & Cotações", description: "Consolidação de pedidos por fornecedor para envio e ordens de compra", category: "suprimentos", icon: "Truck", route: "/fornecedores", badge: "Novo", enabled: true, roles: ["suprimentos", "admin", "super_admin"] },
+    { id: "estoque", name: "Gestão de Estoque", description: "Controle de saldo, movimentações, inventário e ativos", category: "suprimentos", icon: "Warehouse", route: "/estoque", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "chamados", name: "Central de Chamados", description: "Abertura e acompanhamento de chamados prediais e serviços com SLA", category: "servicos", icon: "Headphones", route: "/chamados", badge: "Core", enabled: true, roles: ["colaborador", "assistente", "gestor", "admin", "super_admin"] },
+    { id: "feed", name: "Feed de Comunicação", description: "Mural corporativo de avisos importantes e comunicados", category: "comunicacao", icon: "Rss", route: "/feed", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "equipe", name: "Equipe GPS Bridge", description: "Vitrine de contatos dos responsáveis e suporte regional", category: "comunicacao", icon: "Users", route: "/equipe", badge: null, enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
+    { id: "bridget", name: "Bridget (Assistente IA)", description: "Assistente inteligente para dúvidas operacionais e regras do sistema", category: "inteligencia", icon: "Bot", route: "/bridget", badge: "IA", enabled: true, roles: ["colaborador", "assistente", "gestor", "suprimentos", "admin", "super_admin"] },
   ];
 
   for (const m of modulesConfigData) {
     await prisma.systemModule.upsert({
       where: { id: m.id },
-      update: { name: m.name, category: m.category, enabled: m.enabled, roles: m.roles },
+      update: m,
       create: m,
     });
   }
-  console.log(`✅ [Seed] ${modulesConfigData.length} módulos de governança do sistema configurados.`);
+  console.log(`✅ [Seed] ${moduleCategoriesData.length} categorias e ${modulesConfigData.length} módulos do sistema configurados.`);
 
   // Membros da equipe para vitrine
   await prisma.teamMember.createMany({
@@ -1769,6 +1990,41 @@ async function main() {
     });
     console.log(`✅ [Seed] Ativo patrimonial cadastrado com fluxo de vida útil (ID: ${itemPatrimonio.id}).`);
   }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // CONSUMO DO ORÇAMENTO POR CATEGORIA (recalculado dos pedidos aprovados e entregues)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Os itens guardam a categoria do produto no momento do pedido; aqui preenchemos os que não têm
+  await prisma.$executeRaw`
+    UPDATE order_items oi SET product_category_id_snapshot = p.category_id
+    FROM products p WHERE p.id = oi.product_id AND oi.product_category_id_snapshot IS NULL`;
+  // Garante o período de cada suborçamento nos meses que têm pedido aprovado ou entregue
+  await prisma.$executeRaw`
+    INSERT INTO contract_product_category_budget_periods
+      (id, contract_product_category_budget_id, contract_id, period_month, monthly_budget, used_budget, created_at, updated_at)
+    SELECT gen_random_uuid()::text, b.id, b.contract_id, m.period_month, b.monthly_budget, 0, now(), now()
+    FROM contract_product_category_budgets b
+    JOIN (
+      SELECT DISTINCT contract_id, to_char(make_date(ano, mes, 1), 'YYYY-MM') AS period_month
+      FROM orders WHERE status IN ('aprovado', 'entregue')
+    ) m ON m.contract_id = b.contract_id
+    ON CONFLICT (contract_product_category_budget_id, period_month) DO NOTHING`;
+  // Consumo = quantidade x preço dos itens aprovados/entregues da categoria no mês
+  await prisma.$executeRaw`
+    UPDATE contract_product_category_budget_periods p
+    SET used_budget = COALESCE((
+          SELECT SUM(oi.quantity * oi.unit_price)
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          WHERE o.contract_id = p.contract_id
+            AND to_char(make_date(o.ano, o.mes, 1), 'YYYY-MM') = p.period_month
+            AND o.status IN ('aprovado', 'entregue')
+            AND oi.product_category_id_snapshot = b.product_category_id
+        ), 0),
+        updated_at = now()
+    FROM contract_product_category_budgets b
+    WHERE b.id = p.contract_product_category_budget_id`;
+  console.log("✅ [Seed] Consumo do orçamento por categoria recalculado.");
 
   console.log("🎉 [Seed Rico] Carga completa e enriquecida finalizada com sucesso!");
 }

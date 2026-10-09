@@ -43,7 +43,7 @@ API REST Corporativa do ecossistema **GPS Bridge**.
       ErrorResponse: {
         type: "object",
         properties: {
-          statusCode: { type: "integer", example: 400 },
+          status_code: { type: "integer", example: 400 },
           message: { type: "string", example: "Dados de requisição inválidos" },
           error: { type: "string", example: "Bad Request" },
           details: { type: "array", items: { type: "object" } },
@@ -69,8 +69,8 @@ API REST Corporativa do ecossistema **GPS Bridge**.
               role: { type: "string", enum: ["super_admin", "admin", "gestor", "assistente", "colaborador"] },
             },
           },
-          accessToken: { type: "string" },
-          refreshToken: { type: "string" },
+          access_token: { type: "string" },
+          refresh_token: { type: "string" },
           expiresIn: { type: "integer", example: 86400 },
         },
       },

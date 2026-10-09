@@ -1,121 +1,254 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import { accessService, type AccessUser } from "./access.service.js";
+import { notificationService } from "./notification.service.js";
+
+// Solicitação é fora de catálogo: o item pode ter só a descrição, sem produto
+type ItemInput = { productId?: string | null; quantity: number; unitPrice?: number | null; description?: string | null };
+
+// Quem pode editar itens e avançar etapas (no Supabase: policies de UPDATE de admin, suprimentos e gestor)
+const MANAGER_ROLES = ["super_admin", "admin", "suprimentos", "gestor"];
+// Status em que a solicitação pode ser apagada (o front usa "rejeitado")
+const DELETABLE_STATUSES = ["rejeitado", "rejeitada"];
+// Solicitação encerrada não tem mais os itens editados (mexeria no orçamento já fechado)
+const CLOSED_STATUSES = ["concluido", "rejeitado", "rejeitada", "aprovada"];
+// Limites que cabem no banco (Int e Decimal(10,2)/Decimal(12,2)) e no tamanho razoável de uma tela
+const MAX_ITEMS = 200;
+const MAX_QUANTITY = 1_000_000;
+const MAX_UNIT_PRICE = 99_999_999.99;
+const MAX_TOTAL = 9_999_999_999.99;
+const MAX_TEXT = 2000;
+
+const optionalText = (value: unknown, field: string, max = MAX_TEXT) => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value.length > max) {
+    throw new AppError(400, `${field} inválido.`);
+  }
+  return value;
+};
+
+// Tudo que as telas de solicitação leem (lista, detalhe, modal do assistente)
+const SOLICITATION_INCLUDE = {
+  contract: { include: { regional: true } },
+  createdBy: { select: { id: true, name: true, email: true } },
+  items: {
+    include: {
+      product: { include: { category: { select: { name: true } }, supplier: { select: { name: true } } } },
+    },
+  },
+} as const;
+
+const HISTORY_INCLUDE = { user: { select: { name: true } } } as const;
+
+// Item no contrato da API: o modelo, o produto (com categoria e fornecedor calculados) e o total da linha
+function formatItem(it: any) {
+  const unitPrice = Number(it.unitPrice);
+  return {
+    ...it,
+    product: it.product
+      ? { ...it.product, categoria: it.product.category?.name ?? null, fornecedor: it.product.supplier?.name ?? null }
+      : null,
+    total: Math.round(unitPrice * it.quantity * 100) / 100,
+  };
+}
+
+function formatSolicitation(s: any) {
+  return { ...s, items: (s.items ?? []).map(formatItem) };
+}
 
 export class SolicitationService {
-  async listSolicitations(params?: { contractId?: string; status?: string }) {
-    const where: any = {};
-    if (params?.contractId) where.contractId = params.contractId;
-    if (params?.status) where.status = params.status;
-
-    return prisma.solicitation.findMany({
-      where,
-      include: {
-        contract: { include: { regional: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        items: { include: { product: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+  /**
+   * Escopo de leitura (no Supabase eram as policies de SELECT):
+   * admin, suprimentos e gestor veem as dos contratos que acessam; os demais perfis só as próprias.
+   */
+  private scope(user: AccessUser) {
+    return MANAGER_ROLES.includes(user.role)
+      ? { contract: accessService.contractFilter(user) }
+      : { createdById: user.userId };
   }
 
-  async getSolicitationById(id: string) {
-    const s = await prisma.solicitation.findUnique({
-      where: { id },
-      include: {
-        contract: { include: { regional: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-        items: { include: { product: true } },
-        history: { orderBy: { createdAt: "desc" } },
-      },
-    });
-
+  /** Busca uma solicitação dentro do escopo do usuário; responde 404 se não existir ou for de outro escopo. */
+  private async findAccessible(user: AccessUser, id: string) {
+    const s = await prisma.solicitation.findFirst({ where: { AND: [{ id }, this.scope(user)] } });
     if (!s) {
       throw new AppError(404, "Solicitação não encontrada.");
     }
     return s;
   }
 
+  private assertCanManage(user: AccessUser) {
+    if (!MANAGER_ROLES.includes(user.role)) {
+      throw new AppError(403, "Você não tem permissão para alterar solicitações.");
+    }
+  }
+
+  private async prepareItems(items: unknown): Promise<ItemInput[]> {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError(400, "Informe pelo menos um item.");
+    }
+    if (items.length > MAX_ITEMS) {
+      throw new AppError(400, `Uma solicitação aceita no máximo ${MAX_ITEMS} itens.`);
+    }
+    let total = 0;
+    for (const it of items as ItemInput[]) {
+      if (!it || typeof it !== "object") {
+        throw new AppError(400, "Item inválido.");
+      }
+      if (it.productId !== undefined && it.productId !== null && typeof it.productId !== "string") {
+        throw new AppError(400, "Produto do item inválido.");
+      }
+      optionalText(it.description, "Descrição do item", 500);
+      const hasProduct = typeof it.productId === "string" && it.productId !== "";
+      const hasDescription = typeof it.description === "string" && it.description.trim() !== "";
+      if (!hasProduct && !hasDescription) {
+        throw new AppError(400, "Cada item precisa de um produto ou de uma descrição.");
+      }
+      if (!Number.isInteger(it.quantity) || it.quantity <= 0 || it.quantity > MAX_QUANTITY) {
+        throw new AppError(400, "A quantidade de cada item deve ser um número inteiro maior que zero.");
+      }
+      if (it.unitPrice !== undefined && it.unitPrice !== null) {
+        if (typeof it.unitPrice !== "number" || !(it.unitPrice >= 0) || it.unitPrice > MAX_UNIT_PRICE) {
+          throw new AppError(400, "O preço unitário deve estar entre zero e 99.999.999,99.");
+        }
+      }
+      total += (it.unitPrice || 0) * it.quantity;
+    }
+    if (total > MAX_TOTAL) {
+      throw new AppError(400, "O valor total da solicitação é grande demais.");
+    }
+
+    // Produto informado precisa existir (senão o banco recusaria com erro de chave estrangeira)
+    const productIds = [...new Set((items as ItemInput[]).map((it) => it.productId).filter(Boolean))] as string[];
+    if (productIds.length > 0) {
+      const found = await prisma.product.count({ where: { id: { in: productIds } } });
+      if (found !== productIds.length) {
+        throw new AppError(400, "Um dos produtos informados não existe.");
+      }
+    }
+    return items as ItemInput[];
+  }
+
+  async listSolicitations(user: AccessUser, params?: { contractId?: string; status?: string }) {
+    const where: any = { AND: [this.scope(user)] };
+    if (params?.contractId) where.AND.push({ contractId: params.contractId });
+    if (params?.status) where.AND.push({ status: params.status });
+
+    const solicitations = await prisma.solicitation.findMany({
+      where,
+      include: SOLICITATION_INCLUDE,
+      orderBy: { createdAt: "desc" },
+    });
+    return solicitations.map(formatSolicitation);
+  }
+
+  async getSolicitationById(user: AccessUser, id: string) {
+    const s = await prisma.solicitation.findFirst({
+      where: { AND: [{ id }, this.scope(user)] },
+      include: { ...SOLICITATION_INCLUDE, history: { include: HISTORY_INCLUDE, orderBy: { createdAt: "desc" } } },
+    });
+
+    if (!s) {
+      throw new AppError(404, "Solicitação não encontrada.");
+    }
+    return formatSolicitation(s);
+  }
+
   async createSolicitation(
-    userId: string,
+    user: AccessUser,
     data: {
       contractId: string;
-      items: Array<{ product_id: string; quantity: number; unit_price?: number; description?: string }>;
+      items: ItemInput[];
       notes?: string;
     },
   ) {
+    const userId = user.userId;
+    await accessService.assertContractAccess(user, data.contractId);
+    const items = await this.prepareItems(data.items);
+    const notes = optionalText(data.notes, "Observação");
+
     let totalAmount = 0;
-    const itemsToCreate = data.items.map((it) => {
-      const price = it.unit_price || 0;
+    const itemsToCreate = items.map((it) => {
+      const price = it.unitPrice || 0;
       totalAmount += price * it.quantity;
       return {
-        productId: it.product_id,
+        productId: it.productId || null,
         quantity: it.quantity,
         unitPrice: price,
         description: it.description,
       };
     });
 
-    return prisma.solicitation.create({
+    const solicitation = await prisma.solicitation.create({
       data: {
         contractId: data.contractId,
         createdById: userId,
         status: "pendente",
-        step: "gestor",
-        notes: data.notes,
+        step: "aguardando_aprovacao_gestor",
+        notes,
         totalAmount,
         items: { create: itemsToCreate },
         history: {
           create: {
             userId,
             action: "Criação de Solicitação Especial",
-            step: "gestor",
-            notes: data.notes,
+            step: "aguardando_aprovacao_gestor",
+            notes,
           },
         },
       },
-      include: {
-        contract: true,
-        items: true,
-      },
+      include: SOLICITATION_INCLUDE,
     });
+
+    await notificationService.solicitationCreated({
+      solicitationId: solicitation.id,
+      contract: solicitation.contract,
+      actorId: userId,
+    });
+    return formatSolicitation(solicitation);
   }
 
-  async updateItems(
-    id: string,
-    items: Array<{ product_id: string; quantity: number; unit_price?: number; description?: string }>,
-  ) {
-    const s = await prisma.solicitation.findUnique({ where: { id } });
-    if (!s) {
-      throw new AppError(404, "Solicitação não encontrada.");
-    }
-
-    await prisma.solicitationItem.deleteMany({ where: { solicitationId: id } });
+  async updateItems(user: AccessUser, id: string, itemsInput: unknown) {
+    this.assertCanManage(user);
+    await this.findAccessible(user, id);
+    const items = await this.prepareItems(itemsInput);
 
     let totalAmount = 0;
     const itemsToCreate = items.map((it) => {
-      const price = it.unit_price || 0;
+      const price = it.unitPrice || 0;
       totalAmount += price * it.quantity;
       return {
         solicitationId: id,
-        productId: it.product_id,
+        productId: it.productId || null,
         quantity: it.quantity,
         unitPrice: price,
         description: it.description,
       };
     });
 
-    await prisma.solicitationItem.createMany({ data: itemsToCreate });
-    await prisma.solicitation.update({
-      where: { id },
-      data: { totalAmount },
+    // Troca os itens e o total numa transação: se algo falhar, a solicitação não fica sem itens.
+    // O primeiro passo (update do total) trava a linha: dois PUT ao mesmo tempo esperam um pelo outro
+    // e o segundo já apaga os itens do primeiro, em vez de somar as duas listas.
+    return prisma.$transaction(async (tx) => {
+      const locked = await tx.solicitation.updateMany({
+        where: { id, status: { notIn: CLOSED_STATUSES } },
+        data: { totalAmount },
+      });
+      if (locked.count === 0) {
+        throw new AppError(409, "Solicitação encerrada ou já excluída: os itens não podem mais ser alterados.");
+      }
+      await tx.solicitationItem.deleteMany({ where: { solicitationId: id } });
+      await tx.solicitationItem.createMany({ data: itemsToCreate });
+      const saved = await tx.solicitationItem.findMany({
+        where: { solicitationId: id },
+        include: SOLICITATION_INCLUDE.items.include,
+      });
+      return saved.map(formatItem);
     });
-
-    return prisma.solicitationItem.findMany({ where: { solicitationId: id } });
   }
 
   async updateStep(
+    user: AccessUser,
     id: string,
-    userId: string,
     data: {
       step: string;
       status: string;
@@ -124,73 +257,116 @@ export class SolicitationService {
       action?: string;
     },
   ) {
-    const s = await prisma.solicitation.findUnique({ where: { id } });
-    if (!s) {
-      throw new AppError(404, "Solicitação não encontrada.");
+    this.assertCanManage(user);
+    const userId = user.userId;
+    const s = await this.findAccessible(user, id);
+    if (typeof data?.step !== "string" || !data.step || typeof data?.status !== "string" || !data.status) {
+      throw new AppError(400, "Etapa e status são obrigatórios.");
     }
 
-    const updated = await prisma.solicitation.update({
-      where: { id },
-      data: {
-        step: data.step,
-        status: data.status,
-        history: {
-          create: {
-            userId,
-            action: data.action || `Avanço de etapa: ${data.fromStep || s.step} -> ${data.step}`,
-            step: data.step,
-            notes: data.notes,
-          },
+    const notes = optionalText(data.notes, "Observação");
+    const action = optionalText(data.action, "Ação", 200);
+    const fromStep = optionalText(data.fromStep, "Etapa de origem", 100);
+
+    // Só atualiza se a etapa e o status continuam os que lemos: evita sobrescrever a mudança de outra pessoa
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.solicitation.updateMany({
+        where: { id, step: s.step, status: s.status },
+        data: { step: data.step, status: data.status },
+      });
+      if (changed.count === 0) {
+        throw new AppError(409, "A solicitação foi alterada por outra pessoa. Atualize a página e tente de novo.");
+      }
+      await tx.solicitationHistory.create({
+        data: {
+          solicitationId: id,
+          userId,
+          action: action || `Avanço de etapa: ${fromStep || s.step} -> ${data.step}`,
+          step: data.step,
+          notes,
         },
-      },
-      include: {
-        contract: true,
-        items: true,
-      },
+      });
+      return tx.solicitation.findUniqueOrThrow({ where: { id }, include: SOLICITATION_INCLUDE });
     });
 
-    return updated;
+    // Avisa quem criou a solicitação quando o status ou a etapa mudou
+    if (s.status !== updated.status || s.step !== updated.step) {
+      await notificationService.solicitationStatusChanged({
+        solicitationId: id,
+        contractName: updated.contract.name,
+        creatorId: updated.createdById,
+        status: updated.status,
+        step: updated.step,
+      });
+    }
+
+    return formatSolicitation(updated);
   }
 
   async revertStep(
+    user: AccessUser,
     id: string,
-    userId: string,
     data: { currentStep: string; previousStep: string; notes?: string },
   ) {
-    return this.updateStep(id, userId, {
+    return this.updateStep(user, id, {
       step: data.previousStep,
-      status: "em_revisao",
+      status: "aguardando_revisao",
       fromStep: data.currentStep,
       action: `Reversão de etapa: ${data.currentStep} -> ${data.previousStep}`,
       notes: data.notes,
     });
   }
 
-  async deleteSolicitation(id: string) {
-    const s = await prisma.solicitation.findUnique({ where: { id } });
-    if (!s) {
-      throw new AppError(404, "Solicitação não encontrada.");
+  /** Só admin e super_admin apagam, e só solicitações rejeitadas (como na policy de DELETE do Supabase). */
+  async deleteSolicitation(user: AccessUser, id: string) {
+    if (!accessService.isAdmin(user)) {
+      throw new AppError(403, "Somente administradores podem excluir solicitações.");
     }
-    await prisma.solicitation.delete({ where: { id } });
+    const s = await this.findAccessible(user, id);
+    if (!DELETABLE_STATUSES.includes(s.status)) {
+      throw new AppError(409, "Só é possível excluir solicitações rejeitadas.");
+    }
+    // O status entra no filtro: se mudou depois da leitura, não apaga
+    const result = await prisma.solicitation.deleteMany({ where: { id, status: { in: DELETABLE_STATUSES } } });
+    if (result.count === 0) {
+      throw new AppError(409, "O status da solicitação foi alterado. Atualize a página e tente de novo.");
+    }
     return { id, deleted: true };
   }
 
-  async getHistory(id: string) {
-    return prisma.solicitationHistory.findMany({
+  async getHistory(user: AccessUser, id: string) {
+    await this.findAccessible(user, id);
+    const history = await prisma.solicitationHistory.findMany({
       where: { solicitationId: id },
+      include: HISTORY_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
+    return history;
   }
 
-  async addHistory(id: string, userId: string, data: { action: string; notes?: string }) {
-    return prisma.solicitationHistory.create({
+  async addHistory(
+    user: AccessUser,
+    id: string,
+    data: { action: string; notes?: string; details?: string | null; toStep?: string | null },
+  ) {
+    await this.findAccessible(user, id);
+    if (typeof data?.action !== "string" || !data.action || data.action.length > 200) {
+      throw new AppError(400, "A ação é obrigatória (até 200 caracteres).");
+    }
+    const notes = optionalText(data.notes, "Observação") ?? optionalText(data.details, "Observação");
+    const step = optionalText(data.toStep, "Etapa", 100);
+    const entry = await prisma.solicitationHistory.create({
       data: {
         solicitationId: id,
-        userId,
+        userId: user.userId,
         action: data.action,
-        notes: data.notes,
+        // O front envia `details` e `toStep` (formato do Supabase); aceitamos os dois nomes
+        step,
+        notes,
       },
+      include: HISTORY_INCLUDE,
     });
+    return entry;
   }
 }
 
