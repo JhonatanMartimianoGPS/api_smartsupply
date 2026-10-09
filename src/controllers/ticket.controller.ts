@@ -129,7 +129,7 @@ export class TicketController {
   // ─── Etapas (Steps) ─────────────────────────────────────────────────────────
   async addStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const step = await ticketService.addStep(req.user!, req.params.id as string, req.body.name ?? req.body.title);
+      const step = await ticketService.addStep(req.user!, req.params.id as string, req.body.title);
       res.status(201).json(step);
     } catch (error) {
       next(error);
@@ -138,7 +138,7 @@ export class TicketController {
 
   async toggleStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const step = await ticketService.toggleStep(req.user!, req.params.stepId as string, req.body?.is_completed);
+      const step = await ticketService.toggleStep(req.user!, req.params.stepId as string, req.body?.completed);
       res.json(step);
     } catch (error) {
       next(error);

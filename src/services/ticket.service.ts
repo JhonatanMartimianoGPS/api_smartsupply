@@ -116,24 +116,22 @@ export class TicketService {
   async createTicket(
     user: AccessUser,
     data: {
-      contract_id?: string;
-      contractId?: string;
+      contractId: string;
       title: string;
       description: string;
       priority?: TicketPriority;
-      ticket_type_id?: string | null;
       ticketTypeId?: string | null;
     },
   ) {
     const userId = user.userId;
-    const contractId = data.contractId || data.contract_id;
+    const contractId = data.contractId;
     if (!contractId) {
       throw new AppError(400, "Contrato é obrigatório.");
     }
 
     const contract = await accessService.assertContractAccess(user, contractId);
 
-    const typeId = data.ticketTypeId || data.ticket_type_id || undefined;
+    const typeId = data.ticketTypeId || undefined;
     let slaHours = 48;
     if (typeId) {
       const type = await prisma.ticketType.findUnique({ where: { id: typeId } });
@@ -214,14 +212,14 @@ export class TicketService {
     return this.formatTicket(ticket);
   }
 
-  async updateCost(user: AccessUser, id: string, data: { final_cost?: number | null; auto_sync_cost?: boolean }) {
+  async updateCost(user: AccessUser, id: string, data: { finalCost?: number | null; autoSyncCost?: boolean }) {
     this.assertStaff(user);
     await this.assertTicketAccess(user, id);
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: {
-        finalCost: data.final_cost,
-        autoSyncCost: data.auto_sync_cost,
+        finalCost: data.finalCost,
+        autoSyncCost: data.autoSyncCost,
       },
       include: { contract: true, type: true, supplier: true },
     });
@@ -231,40 +229,34 @@ export class TicketService {
   async updateSupplier(
     user: AccessUser,
     id: string,
-    data: { supplier_id: string | null; supplier_name_snapshot?: string | null },
+    data: { supplierId: string | null; supplierNameSnapshot?: string | null },
   ) {
     this.assertStaff(user);
     await this.assertTicketAccess(user, id);
-    if (data?.supplier_id && (await prisma.registeredSupplier.count({ where: { id: data.supplier_id } })) === 0) {
+    if (data?.supplierId && (await prisma.registeredSupplier.count({ where: { id: data.supplierId } })) === 0) {
       throw new AppError(400, "Fornecedor não encontrado.");
     }
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: {
-        supplierId: data.supplier_id,
-        supplierNameSnapshot: data.supplier_name_snapshot,
+        supplierId: data.supplierId,
+        supplierNameSnapshot: data.supplierNameSnapshot,
       },
       include: { contract: true, type: true, supplier: true },
     });
     return this.formatTicket(ticket);
   }
 
-  /** Define o fluxo de atendimento (e opcionalmente o fornecedor). O front envia os nomes em snake_case. */
+  /** Define o fluxo de atendimento (e opcionalmente o fornecedor). */
   async attend(
     user: AccessUser,
     id: string,
-    data: {
-      flowId?: string;
-      flow_id?: string;
-      supplierId?: string | null;
-      supplier_id?: string | null;
-      supplier_name_snapshot?: string | null;
-    },
+    data: { flowId: string; supplierId?: string | null; supplierNameSnapshot?: string | null },
   ) {
     this.assertStaff(user);
     const before = await this.assertTicketAccess(user, id);
-    const flowId = data.flowId ?? data.flow_id;
-    const supplierId = data.supplierId ?? data.supplier_id ?? undefined;
+    const flowId = data.flowId;
+    const supplierId = data.supplierId ?? undefined;
     if (!flowId) {
       throw new AppError(400, "Fluxo é obrigatório.");
     }
@@ -280,7 +272,7 @@ export class TicketService {
         status: "fluxo_definido",
         flowId,
         supplierId,
-        supplierNameSnapshot: data.supplier_name_snapshot ?? undefined,
+        supplierNameSnapshot: data.supplierNameSnapshot ?? undefined,
       },
       include: { contract: true, type: true, supplier: true },
     });
@@ -343,7 +335,7 @@ export class TicketService {
         order: count + 1,
       },
     });
-    return this.formatStep(step);
+    return step;
   }
 
   /** `desired` é o valor que o front envia (is_completed); sem ele, inverte o estado atual. */
@@ -354,7 +346,7 @@ export class TicketService {
     const completed = typeof desired === "boolean" ? desired : !step.completed;
     // Reenviar o mesmo estado não muda nada (nem troca quem concluiu)
     if (completed === step.completed) {
-      return this.formatStep(step);
+      return step;
     }
 
     const updated = await prisma.ticketStep.update({
@@ -389,7 +381,7 @@ export class TicketService {
       }
     }
 
-    return this.formatStep(updated);
+    return updated;
   }
 
   async deleteStep(user: AccessUser, stepId: string) {
@@ -410,15 +402,7 @@ export class TicketService {
       orderBy: { createdAt: "asc" },
     });
 
-    return messages.map((m) => ({
-      id: m.id,
-      ticket_id: m.ticketId,
-      user_id: m.userId,
-      message: m.message,
-      is_internal: m.isInternal,
-      created_at: m.createdAt.toISOString(),
-      user: m.user,
-    }));
+    return messages;
   }
 
   async addMessage(user: AccessUser, ticketId: string, message: string, isInternal = false) {
@@ -441,15 +425,7 @@ export class TicketService {
 
     await notificationService.ticketMessageCreated({ ticketId, authorId: userId, message, isInternal });
 
-    return {
-      id: msg.id,
-      ticket_id: msg.ticketId,
-      user_id: msg.userId,
-      message: msg.message,
-      is_internal: msg.isInternal,
-      created_at: msg.createdAt.toISOString(),
-      user: msg.user,
-    };
+    return msg;
   }
 
   async deleteMessage(user: AccessUser, messageId: string) {
@@ -525,22 +501,13 @@ export class TicketService {
   async addProduct(
     user: AccessUser,
     ticketId: string,
-    data: {
-      productId?: string | null;
-      product_id?: string | null;
-      product_name_snapshot?: string | null;
-      quantity: number;
-      unitPrice?: number | null;
-      unit_price?: number | null;
-      notes?: string | null;
-    },
+    data: { productId?: string | null; productNameSnapshot?: string | null; quantity: number; unitPrice?: number | null; notes?: string | null },
   ) {
     await this.assertTicketAccess(user, ticketId);
 
-    // O front envia snake_case (formato do Supabase); aceitamos os dois nomes
-    const productId = data.productId || data.product_id || undefined;
-    let unitPrice = data.unitPrice ?? data.unit_price ?? 0;
-    let productNameSnapshot = data.product_name_snapshot ?? "";
+    const productId = data.productId || undefined;
+    let unitPrice = data.unitPrice ?? 0;
+    let productNameSnapshot = data.productNameSnapshot ?? "";
 
     if (productId) {
       const prod = await prisma.product.findUnique({ where: { id: productId } });
@@ -575,89 +542,26 @@ export class TicketService {
     return { productId };
   }
 
-  // Transitório: produto do chamado sai com os nomes que o front lê (snapshots, unit_price, total_price)
+  // Produto do chamado: o modelo mais o código/unidade do produto e o total da linha (calculados)
   private formatProduct(p: any) {
     const unitPrice = Number(p.unitPrice);
     return {
-      id: p.id,
-      ticket_id: p.ticketId,
-      product_id: p.productId,
-      product_name_snapshot: p.productNameSnapshot || p.product?.name || "",
-      product_code_snapshot: p.product?.codigo ?? "",
-      product_unit_snapshot: p.product?.unidade ?? null,
-      quantity: p.quantity,
-      unit_price: unitPrice,
-      total_price: Math.round(unitPrice * p.quantity * 100) / 100,
-      notes: p.notes,
-      created_at: p.createdAt.toISOString(),
-    };
-  }
-
-  // Transitório: etapa sai com os nomes do Prisma e os do front (name, step_order, is_completed)
-  private formatStep(step: any) {
-    return {
-      id: step.id,
-      ticket_id: step.ticketId,
-      ticketId: step.ticketId,
-      title: step.title,
-      name: step.title,
-      order: step.order,
-      step_order: step.order,
-      completed: step.completed,
-      is_completed: step.completed,
-      completed_at: step.completedAt ? step.completedAt.toISOString() : null,
-      completed_by: step.completedBy,
-      created_at: step.createdAt.toISOString(),
+      ...p,
+      productNameSnapshot: p.productNameSnapshot || p.product?.name || "",
+      productCodeSnapshot: p.product?.codigo ?? "",
+      productUnitSnapshot: p.product?.unidade ?? null,
+      totalPrice: Math.round(unitPrice * p.quantity * 100) / 100,
     };
   }
 
   // ─── Helper de Formatação ───────────────────────────────────────────────────
+  // Chamado: o modelo (com relações) mais `counts` (quantos filhos de cada tipo) e os produtos formatados
   private formatTicket(t: any) {
+    const { _count, ...ticket } = t;
     return {
-      id: t.id,
-      title: t.title,
-      description: t.description,
-      contract_id: t.contractId,
-      contractId: t.contractId,
-      contract: t.contract,
-      regional_id: t.regionalId,
-      regionalId: t.regionalId,
-      regional: t.regional,
-      type_id: t.typeId,
-      typeId: t.typeId,
-      type: t.type,
-      flow_id: t.flowId,
-      flow: t.flow,
-      supplier_id: t.supplierId,
-      supplier: t.supplier,
-      supplier_name_snapshot: t.supplierNameSnapshot,
-      created_by_id: t.createdById,
-      createdBy: t.createdBy,
-      assigned_to_id: t.assignedToId,
-      assignedTo: t.assignedTo,
-      status: t.status,
-      priority: t.priority,
-      sla_hours: t.slaHours,
-      final_cost: t.finalCost ? Number(t.finalCost) : null,
-      auto_sync_cost: t.autoSyncCost,
-      resolved_at: t.resolvedAt ? t.resolvedAt.toISOString() : null,
-      created_at: t.createdAt.toISOString(),
-      updated_at: t.updatedAt.toISOString(),
-      // Transitório: o front ainda lê os nomes aninhados do Supabase (service_ticket_steps, service_ticket_products)
-      steps: (t.steps || []).map((st: any) => this.formatStep(st)),
-      service_ticket_steps: (t.steps || []).map((st: any) => this.formatStep(st)),
-      // Transitório: mensagem sai com os nomes do Prisma e os do front (is_internal, created_at...)
-      messages: (t.messages || []).map((m: any) => ({
-        ...m,
-        ticket_id: m.ticketId,
-        user_id: m.userId,
-        is_internal: m.isInternal,
-        created_at: m.createdAt.toISOString(),
-      })),
-      attachments: t.attachments || [],
+      ...ticket,
       products: (t.products || []).map((p: any) => this.formatProduct(p)),
-      service_ticket_products: (t.products || []).map((p: any) => this.formatProduct(p)),
-      counts: t._count,
+      counts: _count,
     };
   }
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ticketController } from "../controllers/ticket.controller.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
+import { apiConvention } from "../middlewares/convention.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { storageService } from "../services/storage.service.js";
 import {
@@ -22,6 +23,7 @@ const staff = authorize(["super_admin", "admin", "suprimentos"]);
 const router = Router();
 
 router.use(authenticate);
+router.use(apiConvention);
 
 // Catálogo de tipos e fluxos
 router.get("/types", (req, res, next) => ticketController.listTypes(req, res, next));
